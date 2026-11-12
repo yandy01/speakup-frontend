@@ -1,4 +1,4 @@
-# État de livraison — SpeakUp AI PWA V1.4
+# État de livraison — SpeakUp AI PWA V1.4.1
 
 ## Conservé depuis les versions précédentes
 
@@ -40,6 +40,7 @@
 - Notifications Push non intégrées.
 - Dashboard administrateur complet non inclus.
 - Le build Vite complet, les appels réels à Agnes/Gemini et les tests micro sur appareils physiques doivent être effectués dans l'environnement du propriétaire du projet avec ses dépendances et secrets.
+- Correctif V1.4.1 : logo principal optimisé en WebP et pris en charge par le précache Workbox ; chunks de dépendances séparés.
 
 ## Contrôles locaux à effectuer
 
@@ -67,3 +68,14 @@ Ensuite, tester :
 10. Vérification que les appels API, conversations, fichiers audio et transcriptions ne sont pas mis en cache.
 
 La syntaxe des fichiers TypeScript/TSX et la validité JSON des fichiers de configuration ont été contrôlées dans l'environnement de préparation. Ce contrôle ne remplace pas `npm run typecheck`, `npm run build` ni les tests réels avec les clés du propriétaire.
+
+
+## Correctif V1.4.1 — build PWA Vercel
+
+- Le fichier `public/speakup-mark.png` de 2,15 Mo dépassait la limite Workbox par défaut de 2 MiB et faisait échouer la génération du Service Worker.
+- Remplacement par `public/speakup-mark.webp` (512 × 512), optimisé pour l'affichage de la marque.
+- Mise à jour de `src/components/Brand.tsx` pour utiliser le WebP.
+- Ajout de `webp` aux extensions statiques précachées par Workbox.
+- Séparation des dépendances lourdes en chunks React, Supabase, graphiques et icônes pour réduire le bundle principal.
+- Aucun changement de schéma Supabase, de clé ou d'endpoint backend.
+- Contrôle de build Vite à effectuer après installation des dépendances dans l'environnement du projet.

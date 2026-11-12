@@ -1,4 +1,10 @@
-# SpeakUp AI — PWA (V1.4)
+# SpeakUp AI — PWA (V1.4.1)
+
+## Correctif de build Vercel / Workbox
+
+Le logo principal a été converti en WebP optimisé de 512 × 512 (environ 55 Ko) et la configuration Workbox inclut désormais les fichiers `.webp` dans le précache. Cela corrige l’échec causé par l’ancien `public/speakup-mark.png` de 2,15 Mo, qui dépassait la limite Workbox de 2 MiB. Le build sépare également les bibliothèques principales en chunks afin de réduire le poids du bundle initial.
+
+Après remplacement des fichiers dans GitHub, pousser le commit sur la branche `main` ou déclencher un nouveau déploiement Vercel. Aucune variable d’environnement ni migration Supabase supplémentaire n’est nécessaire pour ce correctif.
 
 Frontend React + TypeScript + Vite du projet SpeakUp AI. Cette livraison reprend le socle déjà créé dans Supabase et ne réinitialise aucune table.
 
@@ -16,7 +22,7 @@ Frontend React + TypeScript + Vite du projet SpeakUp AI. Cette livraison reprend
 - Le navigateur doit prendre en charge `getUserMedia` et `MediaRecorder`. En production, HTTPS est obligatoire pour accéder au microphone.
 - Progression depuis `user_progress`.
 - Profil utilisateur depuis `profiles`.
-- Identité visuelle sombre et or, avec l'emblème fourni.
+- Identité visuelle sombre et or, avec l'emblème fourni en WebP optimisé (512 × 512) pour réduire le poids de téléchargement et permettre le précache PWA.
 - Documentation et requête SQL de diagnostic non destructive.
 
 ## Téléprompteur et retour du tuteur après chaque lecture
@@ -273,7 +279,7 @@ Les fonctions non raccordées ne sont pas présentées comme opérationnelles.
 speakup-frontend/
 ├── api/chat.ts
 ├── api/analyze-reading.ts
-├── public/speakup-mark.png
+├── public/speakup-mark.webp
 ├── src/
 │   ├── components/
 │   ├── contexts/
@@ -291,7 +297,7 @@ speakup-frontend/
 
 ## 12. Mode PWA (V1.4)
 
-Le projet est préparé comme une Progressive Web App installable. Il reste une application web ; il n'est pas encore publié comme application native sur Google Play ou l'App Store. Le logo argent/or fourni est décliné en icônes PWA.
+Le projet est préparé comme une Progressive Web App installable. Le symbole de marque est servi en WebP léger et inclus dans le précache Workbox via le motif `webp`. Il reste une application web ; il n'est pas encore publié comme application native sur Google Play ou l'App Store. Le logo argent/or fourni est décliné en icônes PWA.
 
 ### Installation des dépendances et démarrage
 
