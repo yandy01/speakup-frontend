@@ -16,28 +16,29 @@ export default async function handler(req: Req, res: Res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body as Record<string, unknown>;
     const text = typeof body?.text === 'string' ? body.text.trim().slice(0, 1800) : ''; const voice = body?.voice === 'Charon' ? 'Charon' : 'Achernar';
     if (!text) { send(res, 400, { error: 'Aucun texte à vocaliser.' }); return; }
+    // Gemini 3.8 TTS uses generateContent (not the older Interactions payload).
+    // Unary TTS responses are complete WAV files and can be played by HTMLAudioElement.
     const primaryModel = env('GEMINI_SPEECH_MODEL') || 'gemini-3.8-flash-tts';
     const fallbackModel = env('GEMINI_SPEECH_FALLBACK_MODEL') || 'gemini-3.8-flash-lite-tts';
-    const requestBody = (model: string) => JSON.stringify({
-      model,
-      input: [{ type: 'user_input', content: [{ type: 'text', text, annotations: [{ type: 'speech_metadata', style: 'Parle exclusivement en français standard francophone, avec une diction native, claire et fluide. Ne prononce pas les consignes. Lis exactement le texte fourni sans le traduire, sans ajouter de commentaire et sans transformer les noms propres. Utilise une prosodie chaleureuse, posée et professionnelle, avec un débit modéré et une articulation nette.' }] }] }],
-      response_format: { type: 'audio' },
-      generation_config: { speech_config: [{ voice }] },
-    });
-    const callModel = async (model: string) => fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+    const requestBody = {
+      contents: [{ role: 'user', parts: [{
+        text,
+        speechMetadata: { style: 'Parle en français standard francophone, avec une diction claire, chaleureuse, naturelle et posée. Lis exactement le texte fourni.' },
+      }] }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { languageCode: 'fr-FR', voiceConfig: { voice } },
+      },
+    };
+    const callModel = async (model: string) => fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model.replace(/^models\//, '')) + ':generateContent', {
       method: 'POST',
       headers: { 'x-goog-api-key': geminiKey, 'Content-Type': 'application/json' },
-      body: requestBody(model),
+      body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(45_000),
     });
     let modelUsed = primaryModel;
     let response = await callModel(primaryModel);
-    // Retry transient overload once, then use Gemini Flash-Lite TTS.
-    if ([429, 500, 502, 503, 504].includes(response.status)) {
-      await new Promise(resolve => setTimeout(resolve, 650));
-      response = await callModel(primaryModel);
-    }
-    if (!response.ok && [429, 500, 502, 503, 504].includes(response.status) && fallbackModel !== primaryModel) {
+    if (!response.ok && [400, 404, 429, 500, 502, 503, 504].includes(response.status) && fallbackModel !== primaryModel) {
       modelUsed = fallbackModel;
       response = await callModel(fallbackModel);
     }
@@ -46,12 +47,21 @@ export default async function handler(req: Req, res: Res) {
       console.error('Eloqia TTS provider error', { status: response.status, model: modelUsed, provider: detail?.error?.status });
       const message = response.status === 503 || response.status === 429
         ? 'La voix du professeur est temporairement surchargée. La réponse écrite reste disponible ; réessaie dans un instant.'
-        : `La synthèse vocale a échoué (${response.status}). Vérifie les modèles GEMINI_SPEECH_MODEL et GEMINI_SPEECH_FALLBACK_MODEL.`;
+        : `La synthèse vocale a échoué (${response.status}). Vérifie la clé Gemini et les modèles TTS configurés.`;
       send(res, response.status >= 500 || response.status === 429 ? 503 : response.status, { error: message });
       return;
     }
-    const payload = await response.json() as any; const audio = payload?.output_audio?.data; const mime = payload?.output_audio?.mime_type || 'audio/wav';
-    if (typeof audio !== 'string' || !audio.length) { send(res, 502, { error: 'Le service vocal n’a pas renvoyé de fichier audio.' }); return; }
+    const payload = await response.json() as any;
+    const parts = payload?.candidates?.[0]?.content?.parts;
+    const audioPart = Array.isArray(parts) ? parts.find((part: any) => typeof part?.inlineData?.data === 'string') : null;
+    const audio = audioPart?.inlineData?.data;
+    const mime = audioPart?.inlineData?.mimeType || 'audio/wav';
+    if (typeof audio !== 'string' || !audio.length) {
+      const providerMessage = payload?.promptFeedback?.blockReason;
+      console.error('Eloqia TTS empty audio response', { model: modelUsed, blockReason: providerMessage || 'none' });
+      send(res, 502, { error: 'Gemini n’a pas renvoyé de fichier audio. Réessaie ou utilise la réponse écrite.' });
+      return;
+    }
     send(res, 200, { audio_base64: audio, mime_type: mime, voice, model: modelUsed, provider: 'gemini-tts' });
   } catch (error) { console.error('Eloqia speech generation error', { name: error instanceof Error ? error.name : 'unknown' }); send(res, 500, { error: 'Impossible de générer la voix du professeur pour le moment.' }); }
 }

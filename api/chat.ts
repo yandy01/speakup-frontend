@@ -143,10 +143,11 @@ function extractOpenAiText(payload: unknown): string {
 }
 
 async function callAgnes(messages: ChatMessage[], systemPrompt: string): Promise<string> {
-  const key = env('AGNES_AI_API_KEY');
+  const key = env('AGNES_AI_API_KEY') || env('AGNES_API_KEY');
   if (!key) throw new Error('AGNES_NOT_CONFIGURED');
-  const model = env('AGNES_AI_MODEL') || 'agnes-3.0-flash';
-  const response = await fetchWithTimeout('https://apihub.agnes-ai.com/v1/chat/completions', {
+  const model = env('AGNES_AI_MODEL') || env('AGNES_MODEL') || 'agnes-2.5-flash';
+  const baseUrl = (env('AGNES_API_URL') || 'https://apihub.agnes-ai.com/v1').replace(/\/$/, '');
+  const response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,

@@ -30,7 +30,7 @@ export default async function handler(req: Req, res: Res) {
     const audio = typeof body?.audio_base64 === 'string' ? body.audio_base64 : '';
     const mime = typeof body?.mime_type === 'string' ? body.mime_type.split(';')[0] : 'audio/webm';
     if (!audio || audio.length > 5_400_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(audio) || !['audio/webm','audio/mp4','audio/m4a','audio/ogg','audio/wav','audio/mpeg','audio/mp3'].includes(mime)) { send(res, 400, { error: 'Format audio invalide ou enregistrement trop long.' }); return; }
-    const preferred = env('GEMINI_AUDIO_MODEL') || 'gemini-3.8-flash';
+    const preferred = env('GEMINI_AUDIO_MODEL') || 'gemini-2.5-flash';
     const models = [...new Set([preferred, 'gemini-2.5-flash'])];
     let lastStatus = 0; let transcript = '';
     for (const model of models) {

@@ -91,6 +91,7 @@ export function CoachPage() {
   function stopCoachAudio() {
     audioRef.current?.pause();
     if (audioRef.current) audioRef.current.currentTime = 0;
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setSpeaking(false);
   }
 
@@ -119,6 +120,26 @@ export function CoachPage() {
       audio.onerror = () => setSpeaking(false);
       await audio.play();
     } catch (e) {
+      // Keep the conversation audible when the remote TTS service or mobile audio
+      // playback is unavailable. The browser voice is a transparent fallback.
+      if ('speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined') {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'fr-FR';
+          utterance.rate = 0.96;
+          utterance.pitch = preset === 'Achernar' ? 1.08 : 0.94;
+          const frenchVoices = window.speechSynthesis.getVoices().filter(item => item.lang.toLowerCase().startsWith('fr'));
+          const preferred = frenchVoices.find(item => preset === 'Achernar' ? /female|audrey|amelie|marie|julie|hortense/i.test(item.name) : /male|thomas|henri|paul/i.test(item.name));
+          if (preferred) utterance.voice = preferred;
+          utterance.onend = () => setSpeaking(false);
+          utterance.onerror = () => setSpeaking(false);
+          window.speechSynthesis.speak(utterance);
+          setVoiceFallback(true);
+          if (announceError) setError('La voix IA est momentanément indisponible. Une voix française de votre appareil prend le relais.');
+          return;
+        } catch { /* fallback indisponible */ }
+      }
       setSpeaking(false);
       setVoiceFallback(true);
       if (announceError) setError(e instanceof Error ? `${e.message} La réponse écrite reste disponible.` : 'La voix du professeur est indisponible.');
@@ -252,7 +273,7 @@ export function CoachPage() {
         <header className="coach-main-heading"><div className="coach-avatar"><Bot size={23} /></div><div><strong>Coach IA Eloquia</strong><span><i className="live-dot" /> Français · Entraînement personnalisé</span></div><button type="button" className={`coach-audio-toggle ${voiceReplies ? 'enabled' : ''}`} onClick={() => { setVoiceReplies(value => !value); if (voiceReplies) stopCoachAudio(); }} aria-label={voiceReplies ? 'Désactiver les réponses vocales' : 'Activer les réponses vocales'} title={voiceReplies ? 'Réponses vocales activées' : 'Réponses vocales désactivées'}>{voiceReplies ? <Volume2 size={19} /> : <VolumeX size={19} />}</button></header>
 
         {error && <div className="coach-error"><Notice kind="error">{error}</Notice></div>}
-        {voiceFallback && <div className="coach-error"><Notice kind="info">La réponse écrite reste disponible. Vous pouvez relancer sa lecture avec le bouton « Écouter ».</Notice></div>}
+        {voiceFallback && <div className="coach-error"><Notice kind="info">La voix IA peut être relayée par la voix française de votre appareil. La réponse écrite reste toujours disponible.</Notice></div>}
 
         <div className={`coach-voice-stage ${recording ? 'is-listening' : ''} ${transcribing || sending ? 'is-thinking' : ''} ${speaking ? 'is-speaking' : ''}`}>
           <div className="coach-wave-field" aria-hidden="true">
