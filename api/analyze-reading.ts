@@ -1,4 +1,4 @@
-/* SpeakUp AI — authenticated, transient audio analysis endpoint. Audio is not stored by this function. */
+/* ELOQIA — authenticated, transient audio analysis endpoint. Audio is not stored by this function. */
 type HeaderValue = string | string[] | undefined;
 type RequestLike = { method?: string; headers: Record<string, HeaderValue>; body?: unknown };
 type ResponseLike = { status: (code: number) => ResponseLike; setHeader: (name: string, value: string) => void; json: (body: unknown) => void; end: () => void };
@@ -71,7 +71,7 @@ function parseBody(body: unknown) {
   const mime = rawMime === 'audio/x-m4a' ? 'audio/mp4' : rawMime;
   const target = cleanString(value.target_text, MAX_TEXT);
   const title = cleanString(value.exercise_title, 160) || 'Lecture guidée';
-  const language = value.language === 'en' ? 'en' : value.language === 'fr' ? 'fr' : null;
+  const language = value.language === 'fr' ? 'fr' : null;
   const duration = Number(value.duration_seconds);
   const allowedMime = ['audio/webm', 'audio/mp4', 'audio/m4a', 'audio/ogg', 'audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/aac', 'audio/flac'];
   if (!audio || audio.length > MAX_AUDIO_BASE64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(audio)) return null;
@@ -104,12 +104,17 @@ function parseFeedback(raw: string): Obj | null {
     const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
     if (!transcript || !summary) return null;
     const list = (key: string) => Array.isArray(parsed[key]) ? (parsed[key] as unknown[]).filter((item): item is string => typeof item === 'string').slice(0, 6) : [];
+    const rawScores = parsed.scores && typeof parsed.scores === 'object' ? parsed.scores as Obj : {};
+    const score = (key: string): number | null => typeof rawScores[key] === 'number' && Number.isFinite(rawScores[key]) ? Math.max(0, Math.min(100, Math.round(rawScores[key] as number))) : null;
+    const totalScore = typeof parsed.total_score === 'number' && Number.isFinite(parsed.total_score) ? Math.max(0, Math.min(100, Math.round(parsed.total_score))) : null;
     return {
       transcript: transcript.slice(0, 8_000),
       summary: summary.slice(0, 1_200),
       strengths: list('strengths'),
       improvements: list('improvements'),
       avoid: list('avoid'),
+      scores: { reading_accuracy: score('reading_accuracy'), pacing: score('pacing'), articulation: score('articulation'), expression: score('expression') },
+      total_score: totalScore,
       next_exercise: typeof parsed.next_exercise === 'string' ? parsed.next_exercise.slice(0, 700) : '',
       confidence_note: typeof parsed.confidence_note === 'string' ? parsed.confidence_note.slice(0, 500) : '',
     };
@@ -130,7 +135,8 @@ export default async function handler(req: RequestLike, res: ResponseLike): Prom
     const supabaseUrl = env('SUPABASE_URL').replace(/\/$/, '');
     const key = env('SUPABASE_PUBLISHABLE_KEY') || env('SUPABASE_ANON_KEY');
     const geminiKey = env('GEMINI_API_KEY');
-    const model = env('GEMINI_AUDIO_MODEL') || env('GEMINI_MODEL') || 'gemini-3.8-flash';
+    const model = env('GEMINI_AUDIO_MODEL') || 'gemini-3.8-flash';
+    const fallbackModel = env('GEMINI_AUDIO_FALLBACK_MODEL') || 'gemini-2.5-flash';
     if (!supabaseUrl || !key) { send(res, 503, { error: 'Le backend Supabase n’est pas configuré côté serveur.' }); return; }
     if (!geminiKey || !model) { send(res, 503, { error: 'Le moteur Gemini audio n’est pas configuré. Ajoutez GEMINI_API_KEY et GEMINI_AUDIO_MODEL dans les variables serveur.' }); return; }
 
@@ -148,31 +154,61 @@ export default async function handler(req: RequestLike, res: ResponseLike): Prom
     if (!quota.ok) { send(res, 503, { error: 'La protection anti-abus Supabase est indisponible. Vérifiez la migration SQL déjà installée.' }); return; }
     if (quota.data !== true) { send(res, 429, { error: 'Limite temporaire atteinte. Attendez une minute avant une nouvelle analyse.' }); return; }
 
-    const prompt = input.language === 'fr'
-      ? `Tu es le tuteur vocal de SpeakUp AI. Analyse réellement l'audio joint : l'utilisateur lit le texte cible ci-dessous. Retourne UNIQUEMENT un objet JSON valide, sans Markdown, avec exactement ces champs : transcript (transcription fidèle de ce qui est audible, conserver les hésitations et répétitions clairement entendues), summary (bilan encourageant mais honnête), strengths (2 à 5 points forts observables), improvements (2 à 5 améliorations concrètes et illustrées par ce qui est entendu), avoid (1 à 4 habitudes précises à éviter ou à surveiller, [] si aucune n'est clairement détectée), next_exercise (un exercice précis de 1 à 3 minutes), confidence_note (limites de l'analyse si bruit, audio court ou transcription incertaine).\n\nRègles : distingue les faits observés des impressions. Ne fabrique pas de scores ni de mesures. Ne juge pas l'accent régional ou étranger comme une faute. N'affirme pas mesurer la confiance ou la personnalité. Si un mot est inaudible, indique [inaudible] plutôt que de l'inventer. Compare avec le texte cible et signale les omissions, substitutions ou ajouts uniquement lorsqu'ils sont clairement identifiables. Évalue la clarté, le rythme, les pauses et l'articulation seulement dans la mesure où l'audio permet de les observer. Le but est d'aider l'apprenant, pas de le décourager.\n\nTitre : ${input.title}\nDurée annoncée : ${input.duration} secondes\nTexte cible :\n${input.target}`
-      : `You are the SpeakUp AI speech tutor. Actually listen to the attached audio: the learner is reading the target text below. Return ONLY a valid JSON object, no Markdown, with exactly these fields: transcript (faithful transcription of audible speech, keep clearly audible fillers and repetitions), summary (encouraging but honest overview), strengths (2 to 5 observable strengths), improvements (2 to 5 specific improvements grounded in the recording), avoid (1 to 4 habits to avoid or watch, [] if none are clearly detected), next_exercise (a specific 1-3 minute exercise), confidence_note (limitations due to noise, short audio or uncertain transcription).\n\nRules: distinguish observations from impressions. Do not invent scores or measurements. Do not treat a regional or non-native accent as an error. Do not claim to measure confidence or personality. Mark unclear words as [inaudible]. Compare the spoken version with the target and mention omissions, substitutions or additions only when clearly identifiable. Assess clarity, pace, pauses and articulation only to the extent supported by the audio. Be helpful, not discouraging.\n\nTitle: ${input.title}\nDuration: ${input.duration} seconds\nTarget text:\n${input.target}`;
+    const prompt = `Tu es le tuteur vocal d’ELOQIA, une école d’éloquence en français. Analyse réellement l'audio joint : l'utilisateur lit le texte cible ci-dessous. Retourne UNIQUEMENT un objet JSON valide, sans Markdown, avec exactement ces champs : transcript (transcription fidèle de ce qui est audible), summary (bilan encourageant mais honnête), strengths (2 à 5 points forts observables), improvements (2 à 5 améliorations concrètes), avoid (1 à 4 habitudes précises à éviter ou à surveiller, [] si aucune n'est clairement détectée), scores (reading_accuracy, pacing, articulation, expression : notes entières sur 100 ; utilise null si l'audio ne permet pas d'évaluer correctement ce critère), total_score (note entière sur 100), next_exercise (un exercice précis de 1 à 3 minutes), confidence_note (limites de l'analyse).
+
+Barème du score total : fidélité au texte 35 %, rythme et pauses 25 %, articulation et intelligibilité 25 %, expressivité et intonation 15 %. Si un critère est null, redistribue proportionnellement son poids entre les critères réellement évaluables et explique cette limite. N'attribue jamais une note de prononciation à partir de la seule transcription. Ne pénalise pas un accent régional ou étranger lorsqu'il reste intelligible. Si la qualité audio est insuffisante, indique null pour les critères impossibles à mesurer et null pour total_score si moins de deux critères sont évaluables. Les notes doivent refléter des éléments réellement audibles, pas une impression générale.
+
+Règles : distingue les faits observés des impressions. Si un mot est inaudible, indique [inaudible]. Compare avec le texte cible et signale les omissions, substitutions ou ajouts uniquement lorsqu'ils sont clairement identifiables. Le but est d'aider l'apprenant, pas de le décourager. Réponds en français exclusivement.
+
+Titre : ${input.title}
+Durée annoncée : ${input.duration} secondes
+Texte cible :
+${input.target}`;
+
+
 
     // Use the stable generateContent REST shape for inline audio. The previous
     // Interactions payload mixed snake_case content fields with generation_config.
-    const audioEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ''))}:generateContent`;
-    const aiResponse = await timedFetch(audioEndpoint, {
-      method: 'POST',
-      headers: { 'x-goog-api-key': geminiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [
-          { text: prompt },
-          { inlineData: { mimeType: input.mime, data: input.audio } },
-        ] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 3_000, responseMimeType: 'application/json' },
-      }),
-    });
-    if (!aiResponse.ok) {
-      const status = aiResponse.status;
-      const providerPayload = await aiResponse.json().catch(() => null) as { error?: { message?: string; status?: string } } | null;
-      const providerMessage = cleanString(providerPayload?.error?.message, 500);
-      console.error('SpeakUp reading provider failed', { status, model, providerStatus: providerPayload?.error?.status });
-      send(res, status === 429 ? 429 : status >= 500 ? 502 : 503, {
-        error: status === 429 ? 'Quota IA momentanément atteinte. Réessayez plus tard.' : `Gemini a refusé l’analyse (${status}). ${providerMessage || 'Vérifiez que le modèle audio est disponible pour votre clé API.'}`,
+    const models = [...new Set([model, fallbackModel].filter(Boolean))];
+    let aiResponse: Response | null = null;
+    let activeModel = model;
+    let lastProviderStatus = 0;
+    let lastProviderMessage = '';
+    for (const candidate of models) {
+      activeModel = candidate;
+      const audioEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidate.replace(/^models\//, ''))}:generateContent`;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await timedFetch(audioEndpoint, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': geminiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [
+              { text: prompt },
+              { inlineData: { mimeType: input.mime, data: input.audio } },
+            ] }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 3_000, responseMimeType: 'application/json' },
+          }),
+        });
+        if (response.ok) { aiResponse = response; break; }
+        lastProviderStatus = response.status;
+        const providerPayload = await response.json().catch(() => null) as { error?: { message?: string; status?: string } } | null;
+        lastProviderMessage = cleanString(providerPayload?.error?.message, 450);
+        console.warn('ELOQIA reading provider retry/fallback', { status: response.status, model: candidate, attempt });
+        if (attempt === 0 && (response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504)) {
+          await new Promise(resolve => setTimeout(resolve, 700));
+          continue;
+        }
+        break;
+      }
+      if (aiResponse) break;
+    }
+    if (!aiResponse) {
+      const busy = lastProviderStatus === 429 || [500, 502, 503, 504].includes(lastProviderStatus);
+      send(res, busy ? 503 : 502, {
+        error: busy
+          ? 'Le service d’analyse vocale est momentanément surchargé. Attends quelques instants et réessaie : ton enregistrement n’a pas été conservé.'
+          : `Le moteur vocal a refusé l’analyse (${lastProviderStatus}). ${lastProviderMessage || 'Vérifie le modèle audio configuré dans Vercel.'}`,
+        retryable: busy,
       });
       return;
     }
@@ -180,9 +216,9 @@ export default async function handler(req: RequestLike, res: ResponseLike): Prom
     const raw = extractText(aiPayload);
     const feedback = parseFeedback(raw);
     if (!feedback) { send(res, 502, { error: 'Le tuteur a retourné un bilan illisible. Réessayez avec un enregistrement plus court et plus net.' }); return; }
-    send(res, 200, { feedback, provider: 'gemini', audioStored: false });
+    send(res, 200, { feedback, provider: 'gemini', model: activeModel, audioStored: false });
   } catch (error) {
-    console.error('SpeakUp reading analysis failed', { name: error instanceof Error ? error.name : 'unknown' });
+    console.error('ELOQIA reading analysis failed', { name: error instanceof Error ? error.name : 'unknown' });
     send(res, 500, { error: 'Une erreur est survenue pendant l’analyse. Votre enregistrement n’a pas été conservé. Réessayez.' });
   }
 }

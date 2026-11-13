@@ -61,7 +61,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         options: { data: { display_name: displayName.trim() } },
       });
       if (error) throw error;
-      return Boolean(data.session);
+      if (data.session) return true;
+      // If email confirmation is disabled, complete the session immediately. If it is enabled, Supabase requires verification and we must not bypass it.
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+      if (!loginError && loginData.session) return true;
+      return false;
     },
     signOut: async () => {
       if (!supabase) return;

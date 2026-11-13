@@ -8,6 +8,8 @@ export interface ReadingFeedback {
   avoid: string[];
   next_exercise: string;
   confidence_note: string;
+  scores: { reading_accuracy: number | null; pacing: number | null; articulation: number | null; expression: number | null };
+  total_score: number | null;
 }
 
 function getEndpoint(): string {
@@ -75,6 +77,13 @@ export async function analyzeReading(input: {
     avoid: Array.isArray(feedback.avoid) ? feedback.avoid.filter((v): v is string => typeof v === 'string') : [],
     next_exercise: typeof feedback.next_exercise === 'string' ? feedback.next_exercise : '',
     confidence_note: typeof feedback.confidence_note === 'string' ? feedback.confidence_note : '',
+    scores: {
+      reading_accuracy: typeof feedback.scores?.reading_accuracy === 'number' ? feedback.scores.reading_accuracy : null,
+      pacing: typeof feedback.scores?.pacing === 'number' ? feedback.scores.pacing : null,
+      articulation: typeof feedback.scores?.articulation === 'number' ? feedback.scores.articulation : null,
+      expression: typeof feedback.scores?.expression === 'number' ? feedback.scores.expression : null,
+    },
+    total_score: typeof feedback.total_score === 'number' ? feedback.total_score : null,
   };
 }
 

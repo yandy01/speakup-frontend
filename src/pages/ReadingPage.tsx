@@ -1,262 +1,68 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, BookOpen, Check, ChevronDown, CircleStop, Clock3, Mic, Pause, Play, RotateCcw, Settings2, Sparkles, Type, Volume2, WandSparkles, MessageCircle, Languages } from 'lucide-react';
+import { AlertCircle, BookOpen, Check, CircleStop, Clock3, Maximize2, Mic, Minimize2, Pause, Play, RotateCcw, Settings2, Sparkles, Type, Volume2, WandSparkles, MessageCircle, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { createConversation, saveMessage } from '../lib/data';
 import { analyzeReading, estimateReadingMatch, estimateWordsPerMinute, type ReadingFeedback } from '../lib/reading';
 import { Notice } from '../components/Notice';
+import { supportedRecorderMime } from '../lib/voice';
 
-interface ReadingText {
-  id: string;
-  title: string;
-  language: 'fr' | 'en';
-  level: 'Débutant' | 'Intermédiaire' | 'Beginner' | 'Intermediate';
-  duration: string;
-  text: string;
-}
-
-const READING_TEXTS: ReadingText[] = [
-  {
-    id: 'fr-1', language: 'fr', level: 'Débutant', title: 'Une journée qui commence bien', duration: '1 min',
-    text: `Chaque matin est une nouvelle occasion d'apprendre et de progresser. Avant de commencer ma journée, je prends quelques minutes pour organiser mes idées. Je définis une priorité, je prépare les tâches importantes et je garde du temps pour les imprévus. Cette petite habitude m'aide à rester concentré et à avancer avec plus de sérénité. Je sais que tout ne sera pas toujours parfait. L'essentiel est de faire de son mieux, de rester curieux et de continuer à apprendre. Les progrès les plus solides viennent souvent de petits efforts répétés chaque jour.`,
-  },
-  {
-    id: 'fr-2', language: 'fr', level: 'Intermédiaire', title: "L’art de communiquer clairement", duration: '1–2 min',
-    text: `Bien communiquer ne consiste pas à parler beaucoup. Il s'agit surtout de transmettre une idée de manière claire, structurée et adaptée à son interlocuteur. Avant de prendre la parole, il est utile de savoir quel message on souhaite faire passer. Une introduction simple permet de donner le contexte. Quelques arguments bien choisis permettent ensuite de développer sa pensée. Enfin, une conclusion courte aide l'auditeur à retenir l'essentiel. Le rythme compte également : une pause au bon moment peut rendre une phrase plus compréhensible qu'une succession de mots prononcés trop rapidement. Avec de la pratique, chacun peut apprendre à choisir ses mots et à mieux faire entendre ses idées.`,
-  },
-  {
-    id: 'en-1', language: 'en', level: 'Beginner', title: 'Small steps make progress', duration: '1 min',
-    text: `Learning a new language takes time, patience, and regular practice. You do not need to speak perfectly on your first day. Start with simple sentences and useful words. Listen carefully, repeat what you hear, and try to use new expressions in real conversations. When you make a mistake, take a moment to understand it and try again. Every short practice session is an opportunity to improve. Small steps, repeated every day, can lead to great progress.`,
-  },
-  {
-    id: 'en-2', language: 'en', level: 'Intermediate', title: 'The value of clear communication', duration: '1–2 min',
-    text: `Clear communication is an essential skill in both personal and professional life. It helps people share ideas, solve problems, and build trust. A good speaker does more than choose the right words: they also organize their thoughts, adapt their message to the audience, and pay attention to their pace. Speaking too quickly can make even a simple idea difficult to follow. Pausing between important points gives listeners time to understand. The goal is not to sound perfect or to hide your accent. The goal is to make your message understandable, natural, and meaningful.`,
-  },
+interface ReadingText { id: string; title: string; level: string; duration: string; focus: string; text: string }
+const TEXTS: ReadingText[] = [
+ { id:'lecture-01', level:'Initiation', duration:'1 min', focus:'Débit et respiration', title:'Commencer sa journée avec intention', text:'Chaque matin offre une nouvelle occasion de progresser. Avant de commencer ma journée, je prends quelques instants pour organiser mes idées. Je choisis une priorité, je prépare les tâches importantes et je garde du temps pour les imprévus. Cette habitude simple m’aide à rester concentré et à avancer avec sérénité. Tout ne sera pas toujours parfait. L’essentiel est de faire de son mieux, de rester curieux et de continuer à apprendre. Les progrès les plus solides viennent souvent de petits efforts répétés chaque jour.' },
+ { id:'lecture-02', level:'Initiation', duration:'1–2 min', focus:'Articulation et ponctuation', title:'La force des mots justes', text:'Les mots ont un pouvoir particulier. Ils peuvent rassurer, expliquer, encourager ou parfois blesser. Bien parler ne signifie pas employer des mots compliqués. Cela consiste surtout à choisir une formulation précise, adaptée à la personne qui nous écoute. Une idée simple, exprimée clairement, vaut souvent mieux qu’un long discours difficile à suivre. Pour progresser, il faut apprendre à ralentir, à articuler et à laisser respirer les phrases. Une pause bien placée donne du relief à une idée importante.' },
+ { id:'lecture-03', level:'Élémentaire', duration:'2 min', focus:'Pauses et intonation', title:'L’art de communiquer clairement', text:'Bien communiquer ne consiste pas à parler beaucoup. Il s’agit surtout de transmettre une idée de manière claire, structurée et adaptée à son interlocuteur. Avant de prendre la parole, il est utile de savoir quel message on souhaite faire passer. Une introduction simple permet de donner le contexte. Quelques arguments bien choisis permettent ensuite de développer sa pensée. Enfin, une conclusion courte aide l’auditeur à retenir l’essentiel. Le rythme compte également : une pause au bon moment peut rendre une phrase plus compréhensible qu’une succession de mots prononcés trop rapidement. Avec de la pratique, chacun peut apprendre à choisir ses mots et à mieux faire entendre ses idées.' },
+ { id:'lecture-04', level:'Intermédiaire', duration:'2 min', focus:'Structure et expression', title:'Convaincre sans imposer', text:'Convaincre ne consiste pas à parler plus fort que les autres. Il s’agit de présenter une idée, de l’expliquer et de donner à son interlocuteur des raisons de l’examiner. Un argument solide s’appuie sur un fait, une expérience ou un exemple concret. Il faut également savoir écouter les objections. Lorsqu’une personne exprime un désaccord, prendre le temps de reformuler son point de vue peut éviter un malentendu. La persuasion repose sur la clarté, la cohérence et le respect. Un bon orateur ne cherche pas seulement à être entendu : il cherche à être compris.' },
+ { id:'lecture-05', level:'Intermédiaire', duration:'2–3 min', focus:'Débit et respiration', title:'Prendre sa place dans une conversation', text:'Prendre la parole dans un groupe demande parfois du courage, mais surtout de la préparation. Il est utile de repérer le moment opportun, de formuler une idée principale et de l’exprimer sans se précipiter. Une voix posée attire l’attention davantage qu’un volume excessif. Le regard, la posture et les gestes accompagnent le message, sans devoir devenir théâtraux. Si une interruption survient, il est possible de reprendre calmement son propos en rappelant le point essentiel. Avec l’expérience, chacun peut apprendre à participer avec assurance tout en laissant aux autres l’espace nécessaire pour s’exprimer.' },
+ { id:'lecture-06', level:'Avancé', duration:'3 min', focus:'Discours et transitions', title:'La parole comme responsabilité', text:'Prendre la parole devant un public est une responsabilité. Les personnes qui nous écoutent nous accordent une partie de leur temps et attendent que nous en fassions un usage utile. Il faut donc choisir un message, organiser les idées et éviter les détours inutiles. Une bonne intervention ne cherche pas à impressionner par la quantité de mots, mais à rendre une pensée accessible. Les exemples éclairent les notions abstraites ; les transitions guident l’auditeur ; les silences permettent aux idées importantes de trouver leur place. Enfin, une conclusion doit donner du sens à ce qui précède. La maîtrise de la parole se construit avec la pratique, l’écoute de soi et la volonté de progresser.' },
+ { id:'lecture-07', level:'Élémentaire', duration:'2 min', focus:'Récit et articulation', title:'Raconter une expérience avec précision', text:'Un bon récit ne consiste pas à raconter chaque détail dans l’ordre où il nous revient. Il consiste à choisir les éléments qui aident l’auditeur à comprendre une situation. Commence par planter le décor : où étais-tu, avec qui et dans quel contexte ? Présente ensuite l’événement qui a changé le cours de l’histoire. Explique ce que tu as fait, ce que tu as appris et pourquoi cette expérience mérite d’être racontée. Lorsque tu t’exprimes, distingue les moments importants des informations secondaires. Ralentis légèrement avant le passage essentiel. Fais une courte pause après une phrase forte. Puis termine par une idée que ton interlocuteur pourra retenir. Un récit clair donne à l’auditeur l’impression de suivre un chemin, et non de recevoir une succession de détails.' },
+ { id:'lecture-08', level:'Intermédiaire', duration:'2–3 min', focus:'Argumentation et persuasion', title:'Défendre une idée sans hausser le ton', text:'Dans une discussion, le volume de la voix ne remplace jamais la solidité d’un raisonnement. Pour défendre une idée, commence par annoncer clairement ta position. Donne ensuite une raison précise, puis illustre-la avec un exemple que ton interlocuteur peut comprendre. Si une objection apparaît, ne cherche pas à répondre avant d’avoir écouté. Reformule ce que tu as entendu pour vérifier que tu as bien compris. Tu peux ensuite reconnaître le point valable, expliquer ton désaccord et apporter un élément complémentaire. Cette méthode demande de la patience, mais elle rend l’échange plus constructif. Elle permet aussi de préserver la relation avec la personne qui ne partage pas ton avis. Un orateur convaincant ne cherche pas à gagner chaque phrase. Il cherche à faire avancer la réflexion et à rendre son raisonnement compréhensible.' },
+ { id:'lecture-09', level:'Intermédiaire', duration:'2–3 min', focus:'Pauses et présence', title:'Donner du relief à sa voix', text:'Une voix agréable à écouter n’est pas nécessairement une voix grave, puissante ou spectaculaire. C’est une voix qui sert le message. Pour donner du relief à ton discours, commence par repérer les mots importants. Tu peux les souligner légèrement par l’intonation, sans forcer le volume. Varie le rythme : ralentis pour expliquer une idée complexe, puis retrouve un débit naturel lorsque le propos devient plus simple. Les pauses ont également une fonction. Elles séparent les idées, laissent le temps de comprendre et attirent l’attention sur une phrase essentielle. Évite cependant de placer une pause au milieu d’un groupe de mots qui doit rester uni. En t’enregistrant, observe si ta voix accompagne le sens de tes phrases. L’objectif n’est pas de jouer un rôle, mais de rendre ta parole vivante, claire et naturelle.' },
+ { id:'lecture-10', level:'Intermédiaire', duration:'2–3 min', focus:'Clarté et pédagogie', title:'Expliquer une idée complexe simplement', text:'Expliquer un sujet difficile est un exercice d’écoute autant que de connaissance. Avant de commencer, demande-toi ce que ton interlocuteur sait déjà et ce qu’il doit comprendre à la fin. Choisis une idée principale et formule-la avec des mots simples. Ensuite, avance étape par étape. Un exemple concret peut rendre une notion abstraite plus facile à saisir. Une comparaison peut éclairer un mécanisme, à condition de ne pas déformer la réalité. Évite les acronymes inutiles et définis les termes indispensables. Après une première explication, vérifie la compréhension au lieu de supposer que tout est évident. Si la personne hésite, essaie une autre formulation. La simplicité n’est pas un appauvrissement du discours. C’est la capacité à organiser ses connaissances pour les rendre accessibles, sans perdre leur précision.' },
+ { id:'lecture-11', level:'Avancé', duration:'3 min', focus:'Leadership et assurance', title:'Prendre la parole quand la décision compte', text:'Il existe des moments où quelques phrases peuvent orienter une décision, rassurer une équipe ou clarifier une situation. Dans ces moments, la préparation est essentielle. Commence par définir le résultat que tu souhaites obtenir. Identifie ensuite les deux ou trois informations dont ton auditoire a réellement besoin. Présente les faits avant les interprétations et distingue clairement ce que tu sais de ce que tu supposes. Si une difficulté existe, nomme-la sans dramatiser et explique les options possibles. Une parole responsable ne promet pas ce qu’elle ne peut pas garantir. Elle reconnaît les incertitudes et indique la prochaine étape. Pendant ton intervention, garde un rythme posé et laisse un espace aux questions. La crédibilité ne vient pas d’une apparence d’infaillibilité. Elle vient de la cohérence entre les mots, les décisions et les actes.' },
+ { id:'lecture-12', level:'Avancé', duration:'3 min', focus:'Gestion des désaccords', title:'Transformer un désaccord en dialogue', text:'Un désaccord n’est pas forcément un conflit. Il peut devenir une occasion de mieux comprendre un problème, à condition que chacun puisse exposer son point de vue. Lorsque tu n’es pas d’accord, évite de commencer par juger la personne. Présente plutôt le point précis que tu contestes. Explique pourquoi il te semble incorrect, puis appuie ton raisonnement sur un fait, un exemple ou une conséquence observable. Prends aussi le temps d’écouter la réponse. Il est possible que ton interlocuteur apporte une information que tu ne possédais pas. Si vos positions restent différentes, cherchez au moins à clarifier les points d’accord et de désaccord. Le but n’est pas de supprimer toute divergence. Le but est de préserver un échange respectueux et de prendre une décision mieux éclairée. Une parole maîtrisée permet de rester ferme sur les idées sans devenir agressif envers les personnes.' },
+ { id:'lecture-13', level:'Avancé', duration:'3 min', focus:'Introduction et conclusion', title:'Captiver dès les premières phrases', text:'Les premières phrases d’une intervention ont une mission simple : donner à l’auditeur une bonne raison de continuer à écouter. Tu peux commencer par une question pertinente, une observation surprenante ou une situation concrète. Évite les longues formules d’introduction qui retardent le sujet. Dès le début, indique le thème et l’enjeu. Pendant le développement, chaque partie doit contribuer au message principal. Les transitions montrent à l’auditeur où tu en es et pourquoi tu passes à l’idée suivante. À la fin, ne relance pas un nouveau sujet. Rappelle l’essentiel, puis formule une conclusion qui donne du sens à l’ensemble. Si tu attends une décision ou une action, explique précisément ce que tu demandes. Une intervention réussie n’est pas celle qui accumule les effets. C’est celle qui accompagne l’auditeur du début à la fin, sans lui faire perdre le fil.' },
+ { id:'lecture-14', level:'Expert', duration:'3–4 min', focus:'Discours inspirant', title:'Faire de la confiance une pratique', text:'La confiance ne se décrète pas en répétant que tout ira bien. Elle se construit lorsque les personnes constatent que les paroles correspondent aux actes. Dans une équipe, un responsable gagne en crédibilité lorsqu’il explique les décisions, reconnaît les difficultés et tient ses engagements. Dans une conversation, chacun peut contribuer à cette confiance en écoutant réellement, en formulant ses attentes et en respectant la parole donnée. Cela ne signifie pas qu’il faut toujours être d’accord. Au contraire, une relation solide peut supporter un désaccord exprimé avec honnêteté et respect. La confiance exige aussi de reconnaître ses limites. Dire que l’on ne sait pas encore, puis préciser comment on va chercher la réponse, est souvent plus utile que de donner une certitude artificielle. La qualité d’un orateur se mesure également à la responsabilité qu’il prend envers ceux qui l’écoutent. Les mots peuvent ouvrir une possibilité ; seuls les actes peuvent la rendre crédible.' },
+ { id:'lecture-15', level:'Expert', duration:'4 min', focus:'Discours argumentatif', title:'Pourquoi apprendre à parler est un apprentissage continu', text:'Apprendre à parler ne signifie pas chercher une perfection impossible. Cela signifie développer une capacité qui s’améliore avec l’observation, la pratique et le retour des autres. Un jour, tu travailleras l’articulation d’un son. Un autre jour, tu apprendras à organiser une argumentation ou à répondre à une question inattendue. Ces compétences se renforcent mutuellement. Une bonne articulation rend le message plus accessible, mais elle ne suffit pas si les idées restent confuses. Un raisonnement solide peut être utile, mais il perd de sa force si l’orateur ne tient pas compte de son public. La progression demande donc de travailler plusieurs dimensions à la fois, sans vouloir tout corriger en une seule séance. Choisis un objectif précis, enregistre-toi, écoute le résultat et identifie une amélioration prioritaire. Recommence ensuite dans une situation légèrement plus difficile. Avec cette méthode, chaque prise de parole devient une occasion d’apprendre. L’éloquence n’est pas un don réservé à quelques personnes : c’est une pratique qui se développe avec de la méthode, de la régularité et une attention sincère à ceux qui écoutent.' },
 ];
-
-function feedbackMessage(report: ReadingFeedback, title: string, language: 'fr' | 'en'): string {
-  const labels = language === 'fr'
-    ? { intro: 'Bilan de ma lecture guidée', target: 'Texte lu', transcript: 'Transcription reconnue', strengths: 'Ce qui est bien', improvements: 'À améliorer', avoid: 'À éviter ou surveiller', next: 'Prochain exercice', summary: 'Bilan du tuteur' }
-    : { intro: 'My guided reading review', target: 'Text read', transcript: 'Recognised transcript', strengths: 'What went well', improvements: 'What to improve', avoid: 'What to avoid or watch', next: 'Next exercise', summary: 'Tutor summary' };
-  const list = (items: string[]) => items.length ? items.map(item => `- ${item}`).join('\n') : '- —';
-  return `${labels.intro}: ${title}\n\n${labels.summary}: ${report.summary}\n\n${labels.strengths}:\n${list(report.strengths)}\n\n${labels.improvements}:\n${list(report.improvements)}\n\n${labels.avoid}:\n${list(report.avoid)}\n\n${labels.next}: ${report.next_exercise}\n\n${labels.transcript}:\n${report.transcript.slice(0, 1300)}\n\n${report.confidence_note}`.slice(0, 3900);
+function formatTeleprompterText(text: string): string {
+ const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+ const paragraphs: string[] = [];
+ for (let index = 0; index < sentences.length; index += 3) paragraphs.push(sentences.slice(index, index + 3).join(' ').trim());
+ return paragraphs.join('\n\n');
 }
+function reportText(r: ReadingFeedback, title: string) { const list = (a: string[]) => a.length ? a.map(x => `- ${x}`).join('\n') : '- Aucun point précis relevé.'; const scoreLine = r.total_score === null ? 'Note : non évaluée (données insuffisantes).' : `Note globale : ${r.total_score}/100\nFidélité : ${r.scores.reading_accuracy ?? 'non évaluée'}/100 · Rythme : ${r.scores.pacing ?? 'non évalué'}/100 · Articulation : ${r.scores.articulation ?? 'non évaluée'}/100 · Expressivité : ${r.scores.expression ?? 'non évaluée'}/100`; return `Bilan de ma lecture : ${title}\n\n${scoreLine}\n\nRetour du tuteur : ${r.summary}\n\nPoints forts :\n${list(r.strengths)}\n\nÀ améliorer :\n${list(r.improvements)}\n\nÀ éviter :\n${list(r.avoid)}\n\nProchain exercice : ${r.next_exercise}\n\nTranscription :\n${r.transcript.slice(0,1100)}\n\n${r.confidence_note}`.slice(0,3900); }
 
 export function ReadingPage() {
-  const { user, session } = useAuth();
-  const navigate = useNavigate();
-  const [language, setLanguage] = useState<'fr' | 'en'>('fr');
-  const [selectedId, setSelectedId] = useState('fr-1');
-  const [fontSize, setFontSize] = useState(27);
-  const [speed, setSpeed] = useState(34);
-  const [autoScroll, setAutoScroll] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [feedback, setFeedback] = useState<ReadingFeedback | null>(null);
-  const [conversationId, setConversationId] = useState('');
-  const [error, setError] = useState('');
-  const [saveWarning, setSaveWarning] = useState('');
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  const discardRef = useRef(false);
-  const elapsedRef = useRef(0);
-
-  const texts = useMemo(() => READING_TEXTS.filter(item => item.language === language), [language]);
-  const selected = (texts.find(item => item.id === selectedId) ?? texts[0])!;
-
-  useEffect(() => {
-    if (selected && selected.id !== selectedId) setSelectedId(selected.id);
-  }, [selected, selectedId]);
-
-  useEffect(() => {
-    if (!autoScroll || !scrollRef.current) return;
-    let frame = 0;
-    let lastTime = 0;
-    const tick = (time: number) => {
-      const node = scrollRef.current;
-      if (!node) return;
-      if (lastTime) {
-        const delta = Math.min(time - lastTime, 50);
-        node.scrollTop += (speed * delta) / 1000;
-        if (node.scrollTop + node.clientHeight >= node.scrollHeight - 4) {
-          setAutoScroll(false);
-          return;
-        }
-      }
-      lastTime = time;
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [autoScroll, speed, selectedId]);
-
-  useEffect(() => {
-    if (!recording || paused) return;
-    const timer = window.setInterval(() => {
-      setElapsed(previous => {
-        elapsedRef.current = previous + 1;
-        return previous + 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [recording, paused]);
-
-  useEffect(() => () => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
-    streamRef.current?.getTracks().forEach(track => track.stop());
-  }, []);
-
-  function resetReading() {
-    setFeedback(null);
-    setConversationId('');
-    setError('');
-    setSaveWarning('');
-    setElapsed(0);
-    elapsedRef.current = 0;
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  }
-
-  async function persistTutorConversation(report: ReadingFeedback, title: string): Promise<string> {
-    if (!user) throw new Error('Connectez-vous pour conserver le bilan dans votre espace tuteur.');
-    const conversation = await createConversation(user.id, `Lecture — ${title}`.slice(0, 48), language);
-    const userContext = `${language === 'fr' ? 'J’ai terminé une lecture guidée. Voici le texte et le retour audio réel de mon tuteur. Aide-moi à comprendre mes difficultés et à progresser.' : 'I completed a guided reading. Here is the target text and my actual audio feedback. Help me understand my difficulties and improve.'}\n\nTEXTE CIBLE:\n${selected.text.slice(0, 900)}\n\nTRANSCRIPTION RECONNUE:\n${report.transcript.slice(0, 1100)}\n\nBILAN:\n${report.summary}`.slice(0, 3900);
-    await saveMessage({ conversationId: conversation.id, userId: user.id, role: 'user', content: userContext });
-    await saveMessage({ conversationId: conversation.id, userId: user.id, role: 'assistant', content: feedbackMessage(report, title, language) });
-    setConversationId(conversation.id);
-    return conversation.id;
-  }
-
-  async function processAudio(blob: Blob, durationSeconds: number) {
-    if (!session) { setError('Votre session a expiré. Reconnectez-vous avant de lancer une analyse.'); return; }
-    if (!blob.size) { setError('Aucun son n’a été enregistré. Vérifiez l’autorisation du microphone.'); return; }
-    setAnalyzing(true);
-    setError('');
-    setFeedback(null);
-    setConversationId('');
-    setSaveWarning('');
-    try {
-      const report = await analyzeReading({ session, audio: blob, durationSeconds, targetText: selected.text, title: selected.title, language });
-      setFeedback(report);
-      try {
-        await persistTutorConversation(report, selected.title);
-      } catch (saveError) {
-        setSaveWarning(saveError instanceof Error ? saveError.message : 'Le bilan est prêt, mais sa conversation n’a pas pu être sauvegardée.');
-      }
-    } catch (analysisError) {
-      setError(analysisError instanceof Error ? analysisError.message : 'Impossible d’analyser cette lecture.');
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
-  async function startRecording() {
-    resetReading();
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setError('Cet appareil ou ce navigateur ne prend pas en charge l’enregistrement audio nécessaire. Essayez avec Chrome ou Safari à jour, en HTTPS.');
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      const candidates = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'];
-      const mimeType = candidates.find(candidate => MediaRecorder.isTypeSupported(candidate));
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 64000 } : { audioBitsPerSecond: 64000 });
-      streamRef.current = stream;
-      recorderRef.current = recorder;
-      chunksRef.current = [];
-      discardRef.current = false;
-      elapsedRef.current = 0;
-      setElapsed(0);
-      recorder.ondataavailable = event => { if (event.data.size > 0) chunksRef.current.push(event.data); };
-      recorder.onerror = () => setError('Une erreur est survenue pendant l’enregistrement.');
-      recorder.onstop = () => {
-        const actualMime = recorder.mimeType || mimeType || 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type: actualMime.split(';')[0] });
-        const duration = Math.max(1, elapsedRef.current);
-        stream.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-        recorderRef.current = null;
-        setRecording(false);
-        setPaused(false);
-        setAutoScroll(false);
-        if (!discardRef.current) void processAudio(blob, duration);
-      };
-      recorder.start(500);
-      setRecording(true);
-      setPaused(false);
-      setAutoScroll(true);
-    } catch (recordError) {
-      setError(recordError instanceof Error && recordError.name === 'NotAllowedError'
-        ? 'Le microphone est bloqué. Autorisez SpeakUp AI à utiliser le microphone dans les réglages du navigateur.'
-        : 'Impossible d’accéder au microphone. Vérifiez qu’aucune autre application ne l’utilise.');
-    }
-  }
-
-  function togglePause() {
-    const recorder = recorderRef.current;
-    if (!recorder) return;
-    if (recorder.state === 'recording') {
-      recorder.pause();
-      setPaused(true);
-      setAutoScroll(false);
-    } else if (recorder.state === 'paused') {
-      recorder.resume();
-      setPaused(false);
-      setAutoScroll(true);
-    }
-  }
-
-  function stopRecording(discard = false) {
-    const recorder = recorderRef.current;
-    if (!recorder || recorder.state === 'inactive') return;
-    discardRef.current = discard;
-    recorder.stop();
-  }
-
-  const wpm = feedback ? estimateWordsPerMinute(feedback.transcript, elapsed) : null;
-  const match = feedback ? estimateReadingMatch(selected.text, feedback.transcript) : null;
-
-  return <div className="page-stack reading-page">
-    <section className="page-intro-row"><div><span className="eyebrow">LECTURE GUIDÉE & EXPRESSION ORALE</span><h2>Votre téléprompteur</h2><p>Lisez à votre rythme, enregistrez votre voix et recevez un véritable retour de votre tuteur IA.</p></div><div className="intro-medallion"><BookOpen size={25} /></div></section>
-
-    {!recording && !analyzing && !feedback && <div className="reading-selection panel">
-      <div className="reading-selection-top"><div><span className="eyebrow">1 · CHOISIR UN TEXTE</span><h3>Que souhaitez-vous lire ?</h3></div><div className="reading-language"><Languages size={16}/><select value={language} onChange={event => { setLanguage(event.target.value as 'fr' | 'en'); resetReading(); }} aria-label="Langue du texte"><option value="fr">Français</option><option value="en">English</option></select></div></div>
-      <div className="reading-text-choices">{texts.map(item => <button key={item.id} className={`reading-choice ${selected?.id === item.id ? 'active' : ''}`} onClick={() => { setSelectedId(item.id); resetReading(); }}><span className="reading-choice-level">{item.level} · {item.duration}</span><strong>{item.title}</strong><span>{item.text.slice(0, 112)}…</span><i>{selected?.id === item.id ? <Check size={15}/> : <ChevronDown size={15}/>}</i></button>)}</div>
-      <div className="reading-start-row"><div><strong>{selected?.title}</strong><span>{selected?.text.trim().split(/\s+/).length} mots · {language === 'fr' ? 'Texte original en français' : 'Original English text'}</span></div><button className="button button-primary" onClick={() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; document.getElementById('reading-stage')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}><BookOpen size={16}/> Ouvrir le téléprompteur</button></div>
-    </div>}
-
-    {!feedback && !analyzing && <section id="reading-stage" className="teleprompter-panel panel">
-      <div className="teleprompter-toolbar"><div><span className="eyebrow">2 · VOTRE TEXTE</span><h3>{selected?.title}</h3></div><div className="teleprompter-tools"><button className="tool-button" onClick={() => setFontSize(value => Math.max(20, value - 2))} title="Réduire le texte"><Type size={15}/><span>A−</span></button><button className="tool-button" onClick={() => setFontSize(value => Math.min(40, value + 2))} title="Agrandir le texte"><Type size={15}/><span>A+</span></button></div></div>
-      <div className="teleprompter-settings"><label><span><Settings2 size={14}/> Vitesse de défilement</span><strong>{speed} px/s</strong><input type="range" min="12" max="75" step="1" value={speed} onChange={event => setSpeed(Number(event.target.value))} /></label><span className="teleprompter-hint">Placez le téléphone à hauteur des yeux et lisez sans vous presser.</span></div>
-      <div className={`teleprompter-window ${recording ? 'is-recording' : ''}`} ref={scrollRef}>
-        <div className="teleprompter-fade top"/><p className="teleprompter-text" style={{ fontSize }}>{selected?.text}</p><div className="teleprompter-fade bottom"/>
-      </div>
-      <div className="teleprompter-footer"><div className="teleprompter-timer"><span className={`record-dot ${recording ? 'active' : ''}`}/><strong>{String(Math.floor(elapsed / 60)).padStart(2, '0')}:{String(elapsed % 60).padStart(2, '0')}</strong><span>{recording ? (paused ? 'En pause' : 'Enregistrement') : 'Prêt à lire'}</span></div>
-        {!recording ? <button className="button button-primary" onClick={() => void startRecording()} disabled={analyzing}><Mic size={17}/> Commencer la lecture</button> : <div className="recording-controls"><button className="button button-secondary" onClick={togglePause}>{paused ? <Play size={16}/> : <Pause size={16}/>} {paused ? 'Reprendre' : 'Pause'}</button><button className="button button-primary" onClick={() => stopRecording(false)}><CircleStop size={17}/> Terminer et analyser</button><button className="tool-button danger" onClick={() => stopRecording(true)} title="Annuler l’enregistrement"><RotateCcw size={16}/></button></div>}
-      </div>
-      {recording && <div className="recording-note"><Volume2 size={14}/> Gardez une voix naturelle. Le défilement se met en pause lorsque vous mettez l’enregistrement en pause.</div>}
-    </section>}
-
-    {error && <Notice kind="error">{error}</Notice>}
-    {analyzing && <section className="reading-analysis-loading panel"><div className="analysis-orb"><WandSparkles size={28}/></div><span className="eyebrow">VOTRE TUTEUR ÉCOUTE</span><h3>Analyse de votre lecture en cours…</h3><p>Le tuteur transcrit votre lecture, la compare au texte et prépare un retour personnalisé.</p><div className="analysis-progress"><i/></div><small>L’enregistrement est transmis pour analyse et n’est pas conservé par cette fonction.</small></section>}
-
-    {feedback && <section className="reading-feedback panel">
-      <div className="feedback-heading"><div><span className="eyebrow">3 · RETOUR PERSONNALISÉ</span><h3>Votre tuteur a terminé son analyse</h3><p>{feedback.summary}</p></div><div className="feedback-medallion"><Sparkles size={25}/></div></div>
-      <div className="reading-metrics"><div><span><Clock3 size={14}/> Durée</span><strong>{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</strong></div><div><span><Volume2 size={14}/> Débit estimé</span><strong>{wpm ? `${wpm}` : '—'} <small>mots/min</small></strong></div><div><span><Check size={14}/> Correspondance estimée</span><strong>{match === null ? '—' : `${match}%`}</strong></div></div>
-      <div className="feedback-columns">
-        <article className="feedback-card strengths"><h4><Check size={16}/> Ce qui est bien</h4>{feedback.strengths.length ? <ul>{feedback.strengths.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>Aucun point fort précis n’a pu être isolé.</p>}</article>
-        <article className="feedback-card improvements"><h4><WandSparkles size={16}/> Ce que vous pouvez améliorer</h4>{feedback.improvements.length ? <ul>{feedback.improvements.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>Aucune amélioration prioritaire n’a été identifiée.</p>}</article>
-        <article className="feedback-card avoid"><h4><AlertCircle size={16}/> Ce qu’il faut éviter</h4>{feedback.avoid.length ? <ul>{feedback.avoid.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>Aucune habitude particulière à éviter n’a été clairement détectée.</p>}</article>
-      </div>
-      {feedback.next_exercise && <div className="next-reading-exercise"><span className="eyebrow">VOTRE PROCHAIN EXERCICE</span><p>{feedback.next_exercise}</p></div>}
-      <details className="transcript-details"><summary>Voir la transcription reconnue</summary><p>{feedback.transcript}</p><small>{feedback.confidence_note}</small></details>
-      {saveWarning && <Notice kind="info">Votre bilan est disponible, mais la conversation avec le tuteur n’a pas pu être enregistrée : {saveWarning}</Notice>}
-      <div className="feedback-actions"><button className="button button-primary" onClick={() => { if (conversationId) navigate(`/coach?conversation=${encodeURIComponent(conversationId)}`); else void persistTutorConversation(feedback, selected.title).then(id => navigate(`/coach?conversation=${encodeURIComponent(id)}`)).catch(e => setSaveWarning(e instanceof Error ? e.message : 'Enregistrement impossible.')); }}><MessageCircle size={16}/> Continuer avec mon tuteur</button><button className="button button-secondary" onClick={resetReading}><RotateCcw size={16}/> Refaire la lecture</button></div>
-    </section>}
-    <p className="reading-privacy"><AlertCircle size={13}/> Votre audio est envoyé au moteur IA pour être analysé. Cette fonction ne le sauvegarde pas dans Supabase. Le bilan et la conversation pédagogique sont conservés dans votre historique.</p>
-  </div>;
+ const { user, session } = useAuth(); const navigate = useNavigate();
+ const [selectedId, setSelectedId] = useState(TEXTS[0].id); const [fontSize, setFontSize] = useState(30); const [speed, setSpeed] = useState(28); const [autoScroll, setAutoScroll] = useState(false); const [fullScreen, setFullScreen] = useState(false);
+ const [recording, setRecording] = useState(false); const [paused, setPaused] = useState(false); const [elapsed, setElapsed] = useState(0); const [analyzing, setAnalyzing] = useState(false); const [feedback, setFeedback] = useState<ReadingFeedback | null>(null); const [conversationId, setConversationId] = useState(''); const [error, setError] = useState(''); const [saveWarning, setSaveWarning] = useState('');
+ const scrollRef = useRef<HTMLDivElement | null>(null); const recorderRef = useRef<MediaRecorder | null>(null); const streamRef = useRef<MediaStream | null>(null); const chunksRef = useRef<BlobPart[]>([]); const discardRef = useRef(false); const elapsedRef = useRef(0);
+ const selected = useMemo(() => TEXTS.find(x => x.id === selectedId) || TEXTS[0], [selectedId]);
+ useEffect(() => { if (!autoScroll || !scrollRef.current) return; let frame = 0; let last = 0; const tick = (now: number) => { const node = scrollRef.current; if (!node) return; if (last) { node.scrollTop += (speed * Math.min(now-last,50))/1000; if (node.scrollTop + node.clientHeight >= node.scrollHeight - 3) { setAutoScroll(false); return; } } last = now; frame = requestAnimationFrame(tick); }; frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame); }, [autoScroll, speed, selectedId]);
+ useEffect(() => { if (!recording || paused) return; const id = window.setInterval(() => { setElapsed(v => { elapsedRef.current = v+1; return v+1; }); },1000); return () => clearInterval(id); },[recording,paused]);
+ useEffect(() => () => { if (recorderRef.current && recorderRef.current.state !== 'inactive') { discardRef.current = true; recorderRef.current.stop(); } streamRef.current?.getTracks().forEach(t=>t.stop()); },[]);
+ function releaseMic() { streamRef.current?.getTracks().forEach(t=>t.stop()); streamRef.current = null; recorderRef.current = null; setRecording(false); setPaused(false); }
+ function reset() { setFeedback(null); setConversationId(''); setError(''); setSaveWarning(''); setElapsed(0); elapsedRef.current = 0; setAutoScroll(false); setFullScreen(false); if (scrollRef.current) scrollRef.current.scrollTop = 0; }
+ async function persist(report: ReadingFeedback): Promise<string> { if (!user) throw new Error('Connecte-toi pour conserver ton bilan.'); const row = await createConversation(user.id, `Lecture — ${selected.title}`.slice(0,48), 'fr'); await saveMessage({ conversationId: row.id, userId: user.id, role:'user', content:`J’ai terminé une lecture guidée. Voici mon texte, ma transcription et mon bilan réel. Aide-moi à travailler mes difficultés.\n\nTEXTE :\n${selected.text.slice(0,900)}\n\nTRANSCRIPTION :\n${report.transcript.slice(0,1000)}` }); await saveMessage({ conversationId: row.id, userId: user.id, role:'assistant', content:reportText(report,selected.title) }); setConversationId(row.id); if (supabase && report.total_score !== null) { const xp = Math.round(report.total_score * .6); const { error } = await supabase.from('reading_attempts').insert({ user_id:user.id, text_id:selected.id, title:selected.title, duration_seconds:Math.max(1,elapsed), total_score:report.total_score, reading_accuracy_score:report.scores.reading_accuracy, pacing_score:report.scores.pacing, articulation_score:report.scores.articulation, expression_score:report.scores.expression, xp_earned:xp, summary:report.summary.slice(0,1000) }); if (error) throw new Error('Le bilan est sauvegardé dans le coach, mais le score de lecture n’a pas été ajouté à la progression. Exécute la migration reading_attempts dans Supabase.'); } return row.id; }
+ async function processAudio(blob: Blob, duration: number) { if (!session) { setError('Ta session a expiré. Reconnecte-toi.'); return; } if (!blob.size) { setError('Aucune parole n’a été enregistrée.'); return; } setAnalyzing(true); setError(''); setAutoScroll(false); try { const report = await analyzeReading({ session, audio:blob, durationSeconds:duration, targetText:selected.text, title:selected.title, language:'fr' }); setFeedback(report); try { await persist(report); } catch(e) { setSaveWarning(e instanceof Error ? e.message : 'Le bilan n’a pas pu être sauvegardé.'); } } catch(e) { setError(e instanceof Error ? e.message : 'Analyse impossible.'); } finally { setAnalyzing(false); setFullScreen(false); } }
+ async function startRecording() { reset(); if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { setError('Ce navigateur ne prend pas en charge l’enregistrement. Ouvre ELOQIA en HTTPS dans Safari ou Chrome à jour.'); return; } try { const stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); const mime = supportedRecorderMime(); const recorder = new MediaRecorder(stream,mime?{mimeType:mime,audioBitsPerSecond:64000}:{audioBitsPerSecond:64000}); streamRef.current=stream;recorderRef.current=recorder;chunksRef.current=[];discardRef.current=false;elapsedRef.current=0;setElapsed(0);recorder.ondataavailable=e=>{if(e.data.size)chunksRef.current.push(e.data);};recorder.onerror=()=>{setError('L’enregistrement a été interrompu.');releaseMic();};recorder.onstop=()=>{const blob=new Blob(chunksRef.current,{type:(recorder.mimeType||mime||'audio/webm').split(';')[0]});const duration=Math.max(1,elapsedRef.current);stream.getTracks().forEach(t=>t.stop());streamRef.current=null;recorderRef.current=null;setRecording(false);setPaused(false);setAutoScroll(false);if(!discardRef.current)void processAudio(blob,duration);};recorder.start(500);setRecording(true);setPaused(false);setAutoScroll(true);setFullScreen(true);requestAnimationFrame(()=>{if(scrollRef.current)scrollRef.current.scrollTop=0;});} catch(e) { const name=e instanceof Error?e.name:'';setError(name==='NotAllowedError'?'Accès au microphone refusé. Autorise le microphone dans les réglages du navigateur.':'Impossible d’ouvrir le microphone. Vérifie les autorisations.'); } }
+ function togglePause() { const r=recorderRef.current;if(!r)return;if(r.state==='recording'){r.pause();setPaused(true);setAutoScroll(false);}else if(r.state==='paused'){r.resume();setPaused(false);setAutoScroll(true);} }
+ function stopRecording(discard=false) { const r=recorderRef.current;if(!r||r.state==='inactive')return;discardRef.current=discard;r.stop();setAutoScroll(false); }
+ const wpm = feedback ? estimateWordsPerMinute(feedback.transcript,elapsed):null; const match = feedback ? estimateReadingMatch(selected.text,feedback.transcript):null;
+ return <div className={`page-stack reading-page eloqia-reading ${fullScreen?'teleprompter-fullscreen':''}`}>
+  <section className="reading-intro"><span className="eyebrow">ENTRAÎNEMENT À LA LECTURE</span><h2>Lis avec intention.</h2><p>Travaille l’articulation, le rythme et l’expressivité. Ton tuteur analyse ta lecture et te donne des conseils concrets.</p></section>
+  {!recording&&!analyzing&&!feedback&&<section className="reading-selection panel"><div className="reading-selection-top"><div><span className="eyebrow">CHOISIS TON TEXTE</span><h3>Quel exercice veux-tu travailler ?</h3></div><span className="reading-focus"><BookOpen size={15}/> {selected.focus}</span></div><div className="reading-text-choices">{TEXTS.map(t=><button key={t.id} className={`reading-choice ${t.id===selectedId?'active':''}`} onClick={()=>{setSelectedId(t.id);reset();}}><span className="reading-choice-level">{t.level} · {t.duration}</span><strong>{t.title}</strong><span>{t.text.slice(0,115)}…</span><i>{t.id===selectedId?<Check size={15}/>:<BookOpen size={15}/>}</i></button>)}</div></section>}
+  {!feedback&&!analyzing&&<section className="teleprompter-panel panel"><div className="teleprompter-toolbar"><div><span className="eyebrow">TÉLÉPROMPTEUR</span><h3>{selected.title}</h3><small>{selected.text.trim().split(/\s+/).length} mots · {selected.focus}</small></div><div className="teleprompter-tools"><button className="tool-button" onClick={()=>setFontSize(v=>Math.max(24,v-2))} aria-label="Réduire le texte">A−</button><button className="tool-button" onClick={()=>setFontSize(v=>Math.min(44,v+2))} aria-label="Agrandir le texte">A+</button>{fullScreen?<button className="tool-button" onClick={()=>setFullScreen(false)} aria-label="Quitter le plein écran"><Minimize2 size={17}/></button>:<button className="tool-button" onClick={()=>setFullScreen(true)} aria-label="Plein écran"><Maximize2 size={17}/></button>}</div></div>
+   <div className="teleprompter-settings"><label><span><Settings2 size={14}/> Défilement</span><strong>{speed} px/s</strong><input type="range" min="8" max="52" value={speed} onChange={e=>setSpeed(Number(e.target.value))}/></label><span className="teleprompter-hint">Place le téléphone à hauteur des yeux. La lecture défile automatiquement pendant l’enregistrement.</span></div>
+   <div className={`teleprompter-window ${recording?'is-recording':''}`} ref={scrollRef}><div className="teleprompter-reading-guide"/><p className="teleprompter-text" style={{fontSize:`${fontSize}px`}}>{formatTeleprompterText(selected.text)}</p></div>
+   <div className="teleprompter-footer"><div className="teleprompter-timer"><span className={`record-dot ${recording?'active':''}`}/><strong>{String(Math.floor(elapsed/60)).padStart(2,'0')}:{String(elapsed%60).padStart(2,'0')}</strong><span>{recording?(paused?'En pause':'Tu lis…'):'Prêt à lire'}</span></div>{!recording?<button className="button button-primary" onClick={()=>void startRecording()}><Mic size={17}/> Commencer la lecture</button>:<div className="recording-controls"><button className="button button-secondary" onClick={togglePause}>{paused?<Play size={16}/>:<Pause size={16}/>} {paused?'Reprendre':'Pause'}</button><button className="button button-primary" onClick={()=>stopRecording(false)}><CircleStop size={17}/> Terminer et analyser</button><button className="tool-button danger" onClick={()=>stopRecording(true)} aria-label="Annuler"><RotateCcw size={16}/></button></div>}</div>
+   {recording&&<div className="reading-recording-state"><span className="eloqia-live-wave active"><i/><i/><i/><i/><i/><i/><i/><i/><i/></span><span>{paused?'Enregistrement en pause':'Enregistrement actif · garde une voix naturelle'}</span></div>}
+  </section>}
+  {error&&<Notice kind="error">{error}</Notice>}
+  {analyzing&&<section className="reading-analysis-loading panel"><div className="analysis-orb"><WandSparkles size={28}/></div><span className="eyebrow">TON TUTEUR ÉCOUTE</span><h3>Analyse de ta lecture…</h3><p>Le tuteur compare ta lecture au texte et prépare un retour sur tes points forts, tes progrès et tes habitudes à corriger.</p><div className="analysis-progress"><i/></div><small>L’audio est traité pour produire ce bilan et n’est pas conservé dans Supabase.</small></section>}
+  {feedback&&<section className="reading-feedback panel"><div className="feedback-heading"><div><span className="eyebrow">TON BILAN PERSONNALISÉ</span><h3>Voici ton retour de lecture</h3><p>{feedback.summary}</p></div><div className="feedback-medallion"><Sparkles size={25}/></div></div><div className="reading-metrics"><div><span><Trophy size={14}/> Note du tuteur</span><strong>{feedback.total_score===null?'Non notée':`${feedback.total_score}/100`}</strong></div><div><span><Clock3 size={14}/> Durée</span><strong>{Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</strong></div><div><span><Volume2 size={14}/> Débit estimé</span><strong>{wpm??'—'} <small>mots/min</small></strong></div><div><span><Check size={14}/> Correspondance au texte</span><strong>{match===null?'—':`${match}%`}</strong></div></div><div className="reading-score-breakdown"><span>Fidélité {feedback.scores.reading_accuracy===null?'—':`${feedback.scores.reading_accuracy}/100`}</span><span>Rythme {feedback.scores.pacing===null?'—':`${feedback.scores.pacing}/100`}</span><span>Articulation {feedback.scores.articulation===null?'—':`${feedback.scores.articulation}/100`}</span><span>Expressivité {feedback.scores.expression===null?'—':`${feedback.scores.expression}/100`}</span></div><div className="feedback-columns"><article className="feedback-card strengths"><h4><Check size={16}/> Ce qui est bien</h4>{feedback.strengths.length?<ul>{feedback.strengths.map((v,i)=><li key={i}>{v}</li>)}</ul>:<p>Aucun point précis relevé.</p>}</article><article className="feedback-card improvements"><h4><WandSparkles size={16}/> À améliorer</h4>{feedback.improvements.length?<ul>{feedback.improvements.map((v,i)=><li key={i}>{v}</li>)}</ul>:<p>Aucune priorité identifiée.</p>}</article><article className="feedback-card avoid"><h4><AlertCircle size={16}/> À éviter ou surveiller</h4>{feedback.avoid.length?<ul>{feedback.avoid.map((v,i)=><li key={i}>{v}</li>)}</ul>:<p>Aucune habitude particulière détectée.</p>}</article></div>{feedback.next_exercise&&<div className="next-reading-exercise"><span className="eyebrow">TON PROCHAIN EXERCICE</span><p>{feedback.next_exercise}</p></div>}<details className="transcript-details"><summary>Voir la transcription reconnue</summary><p>{feedback.transcript}</p><small>{feedback.confidence_note}</small></details>{saveWarning&&<Notice kind="info">{saveWarning}</Notice>}<div className="feedback-actions"><button className="button button-primary" onClick={()=>{if(conversationId)navigate(`/coach?conversation=${encodeURIComponent(conversationId)}`);else void persist(feedback).then(id=>navigate(`/coach?conversation=${encodeURIComponent(id)}`)).catch(e=>setSaveWarning(e instanceof Error?e.message:'Enregistrement impossible.'));}}><MessageCircle size={16}/> En discuter avec mon professeur</button><button className="button button-secondary" onClick={reset}><RotateCcw size={16}/> Refaire la lecture</button></div></section>}
+  <p className="reading-privacy"><AlertCircle size={13}/> Ton enregistrement est transmis au moteur d’analyse et n’est pas sauvegardé. L’audio n’est pas conservé. La transcription, le bilan et la note de progression peuvent être conservés dans ton espace.</p>
+ </div>;
 }
-

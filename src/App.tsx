@@ -10,6 +10,7 @@ import { ReadingPage } from './pages/ReadingPage';
 import { ProgressPage } from './pages/ProgressPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { ChallengePage } from './pages/ChallengePage';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -23,6 +24,7 @@ function AppRoutes() {
       <Route path="exercises" element={<ExercisesPage />} />
       <Route path="reading" element={<ReadingPage />} />
       <Route path="progress" element={<ProgressPage />} />
+      <Route path="challenge" element={<ChallengePage />} />
       <Route path="profile" element={<ProfilePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>

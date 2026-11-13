@@ -28,7 +28,7 @@ export function AuthPage() {
       if (mode === 'login') await signIn(email, password);
       else if (mode === 'signup') {
         const hasSession = await signUp(email, password, name);
-        setSuccess(hasSession ? 'Votre compte est créé.' : 'Compte créé. Vérifiez votre boîte email pour confirmer votre adresse avant de vous connecter.');
+        setSuccess(hasSession ? 'Votre compte est créé. Vous êtes connecté.' : 'Votre compte est créé. Consultez votre boîte email pour confirmer votre adresse, puis connectez-vous.');
         if (!hasSession) setMode('login');
       } else {
         await resetPassword(email);
@@ -44,17 +44,17 @@ export function AuthPage() {
         <div className="auth-art-glow" />
         <Brand />
         <div className="auth-art-copy">
-          <div className="gold-kicker"><Sparkles size={15} /> VOTRE COACH PERSONNEL</div>
+          <div className="gold-kicker"><Sparkles size={15} /> VOTRE ÉCOLE D’ÉLOQUENCE</div>
           <h1>Votre voix.<br /><em>Votre progression.</em></h1>
-          <p>Développez votre aisance, enrichissez votre expression et apprenez à communiquer avec impact.</p>
-          <div className="auth-art-bottom"><span className="gold-line" /> <span>Speak better. Express yourself. Grow.</span></div>
+          <p>Développez votre diction, votre fluidité et votre éloquence grâce à un entraînement guidé.</p>
+          <div className="auth-art-bottom"><span className="gold-line" /> <span>L’art de mieux s’exprimer.</span></div>
         </div>
         <div className="auth-orbit orbit-one" /><div className="auth-orbit orbit-two" />
       </div>
       <div className="auth-form-side">
         <div className="auth-mobile-brand"><Brand /></div>
         <div className="auth-form-wrap">
-          <div className="auth-heading"><span className="eyebrow">BIENVENUE SUR SPEAKUP AI</span><h2>{mode === 'login' ? 'Ravi de vous revoir.' : mode === 'signup' ? 'Créez votre espace.' : 'Mot de passe oublié ?'}</h2><p>{mode === 'login' ? 'Connectez-vous pour reprendre votre progression.' : mode === 'signup' ? 'Commencez votre parcours de progression dès aujourd’hui.' : 'Nous vous enverrons un lien pour réinitialiser votre mot de passe.'}</p></div>
+          <div className="auth-heading"><span className="eyebrow">BIENVENUE SUR ELOQIA</span><h2>{mode === 'login' ? 'Ravi de vous revoir.' : mode === 'signup' ? 'Créez votre espace.' : 'Mot de passe oublié ?'}</h2><p>{mode === 'login' ? 'Connectez-vous pour reprendre votre progression.' : mode === 'signup' ? 'Commencez votre parcours de progression dès aujourd’hui.' : 'Nous vous enverrons un lien pour réinitialiser votre mot de passe.'}</p></div>
           {!configured && <Notice kind="error">Supabase n’est pas encore configuré. Ajoutez les variables <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> dans votre fichier <code>.env.local</code>.</Notice>}
           {error && <Notice kind="error">{error}</Notice>}
           {success && <Notice kind="success">{success}</Notice>}

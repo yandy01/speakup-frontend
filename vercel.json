@@ -2,7 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/chat.ts": { "maxDuration": 60 },
-    "api/analyze-reading.ts": { "maxDuration": 60 }
+    "api/analyze-reading.ts": { "maxDuration": 60 },
+    "api/analyze-speech.ts": { "maxDuration": 60 },
+    "api/transcribe-voice.ts": { "maxDuration": 60 },
+    "api/speech.ts": { "maxDuration": 60 }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

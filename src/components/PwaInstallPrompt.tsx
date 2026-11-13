@@ -61,10 +61,10 @@ export function PwaInstallPrompt() {
 
   return (
     <>
-      <aside className="pwa-install-banner" role="region" aria-label="Installer SpeakUp AI">
+      <aside className="pwa-install-banner" role="region" aria-label="Installer ELOQIA">
         <img src="/icons/pwa-192x192.png" alt="" />
         <div className="pwa-install-copy">
-          <strong>Installer SpeakUp AI</strong>
+          <strong>Installer ELOQIA</strong>
           <span>Retrouve ton coach directement sur ton écran d'accueil.</span>
         </div>
         <button type="button" className="pwa-install-action" onClick={install}>
@@ -80,7 +80,7 @@ export function PwaInstallPrompt() {
           <section className="pwa-modal" role="dialog" aria-modal="true" aria-labelledby="pwa-ios-title" onClick={event => event.stopPropagation()}>
             <button className="pwa-modal-close" type="button" onClick={() => setShowIosHelp(false)} aria-label="Fermer"><X size={18} /></button>
             <div className="pwa-modal-icon"><Share size={22} /></div>
-            <h2 id="pwa-ios-title">Ajouter SpeakUp à l'écran d'accueil</h2>
+            <h2 id="pwa-ios-title">Ajouter ELOQIA à l'écran d'accueil</h2>
             <ol>
               <li>Ouvre cette page dans Safari.</li>
               <li>Appuie sur le bouton <strong>Partager</strong>.</li>

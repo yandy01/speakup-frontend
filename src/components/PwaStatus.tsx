@@ -10,7 +10,7 @@ export function PwaStatus() {
   } = useRegisterSW({
     onRegisterError(error) {
       // Keep diagnostics free of user content and authentication data.
-      console.error('SpeakUp service worker registration failed:', error);
+      console.error('ELOQIA service worker registration failed:', error);
     },
   });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -30,7 +30,7 @@ export function PwaStatus() {
     return (
       <div className="pwa-status" role="status">
         <RefreshCw size={17} />
-        <span>Une nouvelle version de SpeakUp est disponible.</span>
+        <span>Une nouvelle version de ELOQIA est disponible.</span>
         <button type="button" onClick={() => updateServiceWorker(true)}>Mettre à jour</button>
         <button type="button" className="pwa-status-close" aria-label="Plus tard" onClick={() => setNeedRefresh(false)}><X size={16} /></button>
       </div>

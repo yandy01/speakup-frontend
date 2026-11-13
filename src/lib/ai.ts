@@ -11,7 +11,7 @@ export async function askSpeakUpCoach(
   session: Session,
   conversationId: string,
   message: string,
-  language: 'fr' | 'en' = 'fr',
+  language: 'fr' = 'fr',
 ): Promise<string> {
   const response = await fetch(chatEndpoint, {
     method: 'POST',
