@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_1iOAHyrb1j5GFx9IAiNBSTMhsTXA",
+      "name": "speakup-frontend",
+      "directory": ".",
+      "orgId": "team_jKEcRQxi7cEYMtCn4Swv7bQ5"
+    }
+  ]
+}

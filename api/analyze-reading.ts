@@ -67,12 +67,13 @@ function parseBody(body: unknown) {
   const rawAudio = typeof value.audio_base64 === 'string' ? value.audio_base64.trim() : '';
   if (rawAudio.length > MAX_AUDIO_BASE64) return null;
   const audio = cleanString(rawAudio, MAX_AUDIO_BASE64);
-  const mime = cleanString(value.mime_type, 100).split(';')[0].toLowerCase();
+  const rawMime = cleanString(value.mime_type, 100).split(';')[0].toLowerCase();
+  const mime = rawMime === 'audio/x-m4a' ? 'audio/mp4' : rawMime;
   const target = cleanString(value.target_text, MAX_TEXT);
   const title = cleanString(value.exercise_title, 160) || 'Lecture guidée';
   const language = value.language === 'en' ? 'en' : value.language === 'fr' ? 'fr' : null;
   const duration = Number(value.duration_seconds);
-  const allowedMime = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/mpeg', 'audio/aac', 'audio/3gpp', 'audio/x-m4a'];
+  const allowedMime = ['audio/webm', 'audio/mp4', 'audio/m4a', 'audio/ogg', 'audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/aac', 'audio/flac'];
   if (!audio || audio.length > MAX_AUDIO_BASE64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(audio)) return null;
   if (!allowedMime.includes(mime) || !target || !language || !Number.isFinite(duration) || duration < 2 || duration > 240) return null;
   return { audio, mime, target, title, language, duration };
@@ -129,7 +130,7 @@ export default async function handler(req: RequestLike, res: ResponseLike): Prom
     const supabaseUrl = env('SUPABASE_URL').replace(/\/$/, '');
     const key = env('SUPABASE_PUBLISHABLE_KEY') || env('SUPABASE_ANON_KEY');
     const geminiKey = env('GEMINI_API_KEY');
-    const model = env('GEMINI_AUDIO_MODEL') || env('GEMINI_MODEL');
+    const model = env('GEMINI_AUDIO_MODEL') || env('GEMINI_MODEL') || 'gemini-3.8-flash';
     if (!supabaseUrl || !key) { send(res, 503, { error: 'Le backend Supabase n’est pas configuré côté serveur.' }); return; }
     if (!geminiKey || !model) { send(res, 503, { error: 'Le moteur Gemini audio n’est pas configuré. Ajoutez GEMINI_API_KEY et GEMINI_AUDIO_MODEL dans les variables serveur.' }); return; }
 
@@ -151,25 +152,27 @@ export default async function handler(req: RequestLike, res: ResponseLike): Prom
       ? `Tu es le tuteur vocal de SpeakUp AI. Analyse réellement l'audio joint : l'utilisateur lit le texte cible ci-dessous. Retourne UNIQUEMENT un objet JSON valide, sans Markdown, avec exactement ces champs : transcript (transcription fidèle de ce qui est audible, conserver les hésitations et répétitions clairement entendues), summary (bilan encourageant mais honnête), strengths (2 à 5 points forts observables), improvements (2 à 5 améliorations concrètes et illustrées par ce qui est entendu), avoid (1 à 4 habitudes précises à éviter ou à surveiller, [] si aucune n'est clairement détectée), next_exercise (un exercice précis de 1 à 3 minutes), confidence_note (limites de l'analyse si bruit, audio court ou transcription incertaine).\n\nRègles : distingue les faits observés des impressions. Ne fabrique pas de scores ni de mesures. Ne juge pas l'accent régional ou étranger comme une faute. N'affirme pas mesurer la confiance ou la personnalité. Si un mot est inaudible, indique [inaudible] plutôt que de l'inventer. Compare avec le texte cible et signale les omissions, substitutions ou ajouts uniquement lorsqu'ils sont clairement identifiables. Évalue la clarté, le rythme, les pauses et l'articulation seulement dans la mesure où l'audio permet de les observer. Le but est d'aider l'apprenant, pas de le décourager.\n\nTitre : ${input.title}\nDurée annoncée : ${input.duration} secondes\nTexte cible :\n${input.target}`
       : `You are the SpeakUp AI speech tutor. Actually listen to the attached audio: the learner is reading the target text below. Return ONLY a valid JSON object, no Markdown, with exactly these fields: transcript (faithful transcription of audible speech, keep clearly audible fillers and repetitions), summary (encouraging but honest overview), strengths (2 to 5 observable strengths), improvements (2 to 5 specific improvements grounded in the recording), avoid (1 to 4 habits to avoid or watch, [] if none are clearly detected), next_exercise (a specific 1-3 minute exercise), confidence_note (limitations due to noise, short audio or uncertain transcription).\n\nRules: distinguish observations from impressions. Do not invent scores or measurements. Do not treat a regional or non-native accent as an error. Do not claim to measure confidence or personality. Mark unclear words as [inaudible]. Compare the spoken version with the target and mention omissions, substitutions or additions only when clearly identifiable. Assess clarity, pace, pauses and articulation only to the extent supported by the audio. Be helpful, not discouraging.\n\nTitle: ${input.title}\nDuration: ${input.duration} seconds\nTarget text:\n${input.target}`;
 
-    const audioEndpoint = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+    // Use the stable generateContent REST shape for inline audio. The previous
+    // Interactions payload mixed snake_case content fields with generation_config.
+    const audioEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ''))}:generateContent`;
     const aiResponse = await timedFetch(audioEndpoint, {
       method: 'POST',
       headers: { 'x-goog-api-key': geminiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model,
-        input: [
-          { type: 'text', text: prompt },
-          { type: 'audio', data: input.audio, mime_type: input.mime },
-        ],
-        generation_config: { temperature: 0.2, max_output_tokens: 3_000 },
-        store: false,
+        contents: [{ role: 'user', parts: [
+          { text: prompt },
+          { inlineData: { mimeType: input.mime, data: input.audio } },
+        ] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 3_000, responseMimeType: 'application/json' },
       }),
     });
     if (!aiResponse.ok) {
       const status = aiResponse.status;
-      console.error('SpeakUp reading provider failed', { status, model });
+      const providerPayload = await aiResponse.json().catch(() => null) as { error?: { message?: string; status?: string } } | null;
+      const providerMessage = cleanString(providerPayload?.error?.message, 500);
+      console.error('SpeakUp reading provider failed', { status, model, providerStatus: providerPayload?.error?.status });
       send(res, status === 429 ? 429 : status >= 500 ? 502 : 503, {
-        error: status === 429 ? 'Quota IA momentanément atteinte. Réessayez plus tard.' : 'Le moteur Gemini n’a pas accepté cet enregistrement. Vérifiez le modèle audio configuré et réessayez.',
+        error: status === 429 ? 'Quota IA momentanément atteinte. Réessayez plus tard.' : `Gemini a refusé l’analyse (${status}). ${providerMessage || 'Vérifiez que le modèle audio est disponible pour votre clé API.'}`,
       });
       return;
     }

@@ -1,4 +1,4 @@
-# SpeakUp AI — PWA (V1.4.1)
+# SpeakUp AI — PWA (V2.0.0)
 
 ## Correctif de build Vercel / Workbox
 
@@ -336,3 +336,40 @@ Lorsqu'une nouvelle version est disponible, SpeakUp affiche une demande de mise 
 La configuration PWA comprend le manifest, les icônes, la détection d'installation Android, les instructions d'ajout à l'écran d'accueil iOS, l'état réseau et le prompt de mise à jour. Le module Téléprompteur est désormais présent : sélection d'un texte français ou anglais, défilement automatique réglable, réglage de taille, enregistrement, pause/reprise, analyse audio Gemini et rapport pédagogique. Le bilan est sauvegardé dans une conversation de tuteur à partir des tables existantes `conversations` et `messages`. Les notifications push et les paiements restent à intégrer.
 
 Voir `docs/PWA_ROADMAP.md` pour l'architecture, les limites, la politique de cache et le plan de validation.
+
+# V2.0 — Refonte mobile, coach vocal et parcours gamifiés
+
+## Expérience mobile
+- Navigation persistante en bas de l'écran sur téléphone (Accueil, Exercices, Coach, Lecture, Progrès), avec accès au profil depuis l'en-tête.
+- Tailles de texte et zones tactiles augmentées, mises en page adaptées aux petits écrans et prise en compte des safe areas iOS.
+- Bascule mode nuit / mode jour, choix conservé localement sur l'appareil.
+- Téléprompteur agrandi et responsive, avec commandes plus accessibles.
+
+## Coach vocal
+- Le coach peut lire ses réponses à voix haute via la synthèse vocale native du navigateur (`speechSynthesis`). L'utilisateur peut activer/désactiver la voix et relire individuellement une réponse.
+- La dictée vocale utilise Web Speech Recognition lorsqu'elle est disponible. La disponibilité varie selon le navigateur et l'OS ; le clavier reste toujours utilisable.
+- La synthèse vocale du navigateur est une première version sans coût de fournisseur TTS additionnel. La voix et les langues disponibles dépendent de l'appareil.
+- Les réponses formatées Markdown (gras, listes, titres, code) sont rendues proprement dans l'interface.
+
+## Bibliothèque et gamification
+- 12 parcours pédagogiques originaux en français et anglais, 5 questions chacun (60 questions), de A1 à B2, sur grammaire, vocabulaire, compréhension, expression, éloquence et entretiens.
+- Chaque réponse comporte une explication. Chaque tentative donne des XP ; le seuil de validation est fixé à 80 %.
+- Le parcours suivant se débloque après validation du précédent. L'apprenant peut recommencer pour améliorer son résultat.
+- Les meilleurs scores sont conservés localement en secours et synchronisés avec Supabase si la migration `supabase/migrations/20261112_exercise_attempts.sql` a été exécutée.
+
+### Migration additive à exécuter dans Supabase
+Ouvrir SQL Editor, copier le fichier `supabase/migrations/20261112_exercise_attempts.sql`, puis exécuter. Cette migration ajoute uniquement `public.exercise_attempts`, son index et ses politiques RLS. Elle ne supprime ni ne modifie les tables existantes. Chaque utilisateur ne peut lire et ajouter que ses propres tentatives.
+
+## Correction de l'analyse audio Gemini
+L'endpoint `api/analyze-reading.ts` utilise maintenant le format REST `models.generateContent` avec `contents[].parts[].inlineData` (au lieu de l'ancien corps Interactions API). Le modèle par défaut est `gemini-3.8-flash`, qui est documenté par Google pour l'analyse audio. Le modèle peut être remplacé par `GEMINI_AUDIO_MODEL` dans Vercel si un autre modèle compatible est activé pour la clé API. Les erreurs fournisseur incluent désormais un message explicatif expurgé plutôt qu'un message générique.
+
+Référence officielle : https://ai.google.dev/gemini-api/docs/audio
+
+## Mise à jour
+1. Remplacer le contenu du dossier local par le contenu de cette archive en conservant `.env.local` et `.git`.
+2. Exécuter `npm install`.
+3. Dans Supabase SQL Editor, exécuter la nouvelle migration `exercise_attempts`.
+4. Pousser les changements sur GitHub : `git add . && git commit -m "SpeakUp AI V2 mobile UX and learning paths" && git push origin main`.
+5. Attendre le nouveau déploiement Vercel puis tester sur téléphone.
+
+Le build complet et les appels réels aux fournisseurs doivent être validés dans l'environnement de déploiement : l'installation des dépendances a expiré dans l'environnement de préparation hors ligne. Les fichiers TypeScript/TSX ont passé une vérification de transpilation syntaxique.
