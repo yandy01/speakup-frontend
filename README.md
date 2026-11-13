@@ -1,6 +1,6 @@
-# ELOQIA — PWA d'éloquence en français
+# Eloquia — PWA d’éloquence en français
 
-ELOQIA est une Progressive Web App mobile-first qui aide l'utilisateur à développer sa diction, sa fluidité, sa structure de discours et sa prise de parole en public. Cette version est consacrée au français ; l'anglais est reporté à une version ultérieure.
+Eloquia est une Progressive Web App mobile-first qui aide l'utilisateur à développer sa diction, sa fluidité, sa structure de discours et sa prise de parole en public. Cette version est consacrée au français ; l'anglais est reporté à une version ultérieure.
 
 ## 1. Fonctionnalités de cette version
 
@@ -9,7 +9,7 @@ ELOQIA est une Progressive Web App mobile-first qui aide l'utilisateur à dével
 - **Thème clair par défaut** avec bascule vers le mode sombre ; le choix est conservé sur l'appareil.
 - **Police Poppins**, avec Verdana en solution de repli.
 - **Coach vocal push-to-talk** : appuyer pour enregistrer, appuyer pour arrêter ; transcription française, réponse d'Agnes AI (Gemini en secours), puis lecture audio générée avec Gemini TTS.
-- **Choix de voix** : Achernar (féminine) ou Charon (masculine). Le coach affiche une onde animée pour les états écoute, compréhension et réponse.
+- **Choix de timbre** : Achernar (doux) ou Charon (informatif). Les noms des voix préconstruites ne garantissent pas une catégorie de genre ; le rendu doit être écouté et validé avant commercialisation. Le coach affiche une onde animée pour les états écoute, compréhension et réponse.
 - **Coach écrit** avec affichage du Markdown (gras, listes, titres et code) sans afficher les marqueurs `**`.
 - **Parcours gamifié** : 20 étapes en français, 5 questions chacune (100 questions), explications après réponse, meilleur score, XP, seuil de maîtrise de 80 % et déblocage automatique de l'étape suivante après validation.
 - **Téléprompteur** : 15 textes français originaux, réglage de taille et de vitesse, mode plein écran, défilement automatique pendant l'enregistrement, pause/reprise et analyse en fin de lecture.
@@ -36,10 +36,11 @@ Prérequis : Node.js 22 recommandé et npm.
 
 ```bash
 npm install
-cp .env.example .env.local
+# Crée le fichier uniquement s'il n'existe pas déjà.
+test -f .env.local || cp .env.example .env.local
 ```
 
-Renseigner les valeurs dans `.env.local` :
+Si `.env.local` existe déjà, conserve-le et vérifie seulement les variables manquantes. Ne remplace pas tes clés Supabase, Agnes ou Gemini par les valeurs exemples. Renseigner les valeurs nécessaires dans `.env.local` :
 
 ```env
 # Variables publiques utilisées par Vite dans le navigateur
@@ -51,7 +52,7 @@ VITE_API_BASE_URL=/api
 SUPABASE_URL=https://VOTRE_PROJET.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_VOTRE_CLE_PUBLIQUE
 AGNES_AI_API_KEY=VOTRE_CLE_AGNES
-AGNES_AI_MODEL=VOTRE_MODELE_AGNES_ACTIF
+AGNES_AI_MODEL=agnes-3.0-flash
 GEMINI_API_KEY=VOTRE_CLE_GEMINI
 GEMINI_MODEL=gemini-3.8-flash
 GEMINI_AUDIO_MODEL=gemini-3.8-flash
@@ -101,8 +102,9 @@ Les migrations ci-dessous créent uniquement des tables d'historique supplément
 1. `supabase/migrations/20261112_exercise_attempts.sql` — scores des étapes pédagogiques.
 2. `supabase/migrations/20261113_eloqia_challenges.sql` — historique des défis d'une minute.
 3. `supabase/migrations/20261113_eloqia_reading_attempts.sql` — historique et notes des lectures.
+4. `supabase/migrations/20261113_eloqia_exercise_xp.sql` — ajoute `xp_earned` aux tentatives d’exercices sans supprimer les données existantes.
 
-La migration `supabase/ai_chat_security.sql` a déjà été exécutée dans le projet décrit par le récapitulatif. Ne pas recréer les tables historiques ni désactiver RLS.
+La migration XP est additive : elle est nécessaire seulement si la colonne `xp_earned` n’existe pas déjà. Vérifie dans Supabase que le script `supabase/ai_chat_security.sql` (table privée de quota et fonction `consume_ai_chat_quota`) est bien installé avant d’utiliser le coach vocal et les endpoints IA. Ne l’exécute pas aveuglément si la fonction existe déjà ; vérifie d’abord son état. Ne recrée pas les tables historiques et ne désactive jamais RLS.
 
 `supabase/diagnostics.sql` est une requête de diagnostic en lecture seule pour examiner le schéma et les politiques existantes.
 
@@ -146,7 +148,19 @@ Les fonctions serverless du dossier `api/` sont déployées par Vercel en même 
 
 La PWA est installable, mais ce n'est pas encore un binaire natif App Store / Play Store. Une intégration Capacitor pourra être ajoutée après validation du produit.
 
-## 10. Vérifications avant commercialisation
+
+## 10. Refonte mobile Eloquia 3.0
+
+- Navigation principale : Accueil, Exercices, Coach IA, Téléprompteur, Profil. La page de progression reste accessible depuis l’accueil et le profil, sans occuper un onglet de navigation.
+- Accueil simplifié, sans photo de personnage : niveau/XP, série, accès à l’entraînement, outils et lien vers la progression.
+- Coach vocal push-to-talk : une intervention manuelle à la fois, onde centrale animée pour l’écoute, le traitement et la réponse, réponses textuelles et vocales.
+- Parcours de première connexion personnalisé : objectifs, niveau, difficultés et durée quotidienne. Pour cette version, les réponses d’onboarding sont conservées localement sur l’appareil ; elles ne sont pas encore synchronisées entre plusieurs appareils.
+- Identité visuelle provisoire : vert émeraude, thème clair par défaut, mode sombre disponible, Poppins/Verdana. Le symbole microphone fourni dans cette version est un repère temporaire et non le logo final.
+- Les niveaux sont calculés sur une première règle simple de 500 XP par niveau. Ce barème reste un réglage produit à valider avant commercialisation.
+
+La version actuelle enregistre des prises de parole audio et produit une analyse IA. La capture vidéo caméra dans le téléprompteur n’est pas incluse dans cette livraison. Les fonctions vocales réelles nécessitent des variables serveur valides et doivent être testées sur appareil. Les réponses du questionnaire d’accueil sont stockées localement et ne pilotent pas encore automatiquement le niveau de difficulté des 20 étapes.
+
+## 11. Vérifications avant commercialisation
 
 - Tester l'inscription et la confirmation email selon les réglages Supabase.
 - Tester séparément les voix Achernar et Charon en français.
@@ -157,4 +171,4 @@ La PWA est installable, mais ce n'est pas encore un binaire natif App Store / Pl
 - Vérifier les politiques RLS, les webhooks et la suppression des données.
 - Confirmer le build Vite et les appels réels aux fournisseurs dans l'environnement de déploiement.
 
-**Limite de cette archive :** les fichiers TypeScript/TSX ont passé une vérification de transpilation syntaxique. L'installation npm et le build complet n'ont pas pu être exécutés dans l'environnement de préparation, faute d'accès fiable au registre npm. Le build doit donc être confirmé avec `npm install` puis `npm run build` sur le poste de développement ou dans Vercel.
+**Vérification de cette archive :** les 34 fichiers TypeScript/TSX de l’application, des API et de la configuration ont passé une vérification syntaxique ; les endpoints serveur ont également passé `tsc --noEmit --strict`. Le CSS a été analysé par PostCSS, les fichiers JSON de configuration sont valides et les imports relatifs locaux ont été vérifiés. En revanche, l’installation des dépendances npm a expiré dans l’environnement de préparation : le build Vite complet, le rendu dans un navigateur, les appels réels à Supabase/Agnes/Gemini et les tests microphone sur téléphone restent à effectuer avant la production.

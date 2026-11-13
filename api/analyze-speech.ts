@@ -30,7 +30,8 @@ export default async function handler(req: Req, res: Res) {
     if (!url || !key || !geminiKey) { send(res, 503, { error: 'Le tuteur vocal n’est pas configuré côté serveur.' }); return; }
     const auth = await fetchT(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } }, 8000); if (!auth.ok) { send(res, 401, { error: 'Votre session a expiré.' }); return; }
     const quota = await fetchT(`${url}/rest/v1/rpc/consume_ai_chat_quota`, { method: 'POST', headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_window_seconds: 60, p_max_requests: 8 }) }, 8000);
-    if (!quota.ok || await quota.json() !== true) { send(res, 429, { error: 'Limite temporaire atteinte. Réessayez dans une minute.' }); return; }
+    if (!quota.ok) { send(res, 503, { error: 'La protection anti-abus Supabase est indisponible. Vérifiez que supabase/ai_chat_security.sql a bien été appliqué.' }); return; }
+    if (await quota.json().catch(() => false) !== true) { send(res, 429, { error: 'Limite temporaire atteinte. Réessayez dans une minute.' }); return; }
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body as Obj;
     const audio = typeof body?.audio_base64 === 'string' ? body.audio_base64 : ''; const mime = typeof body?.mime_type === 'string' ? body.mime_type.split(';')[0] : 'audio/webm';
     const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 400) : ''; const duration = Math.round(Number(body?.duration_seconds));

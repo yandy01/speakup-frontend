@@ -11,12 +11,13 @@ const TOPICS = [
   'Faut-il apprendre à parler en public dès l’école ?', 'Les réseaux sociaux améliorent-ils vraiment la communication ?', 'Pourquoi est-il important de savoir écouter ?', 'Le télétravail rapproche-t-il ou éloigne-t-il les équipes ?', 'Peut-on réussir sans savoir bien communiquer ?', 'La lecture est-elle encore indispensable aujourd’hui ?', 'Faut-il toujours dire la vérité, même lorsqu’elle dérange ?', 'Le téléphone nous aide-t-il à mieux communiquer ?', 'Pourquoi la ponctualité est-elle une marque de respect ?', 'Les erreurs sont-elles nécessaires pour apprendre ?', 'Comment convaincre quelqu’un sans lui imposer son opinion ?', 'L’intelligence artificielle améliore-t-elle notre manière de travailler ?', 'La confiance se construit-elle par les actes ou par les paroles ?', 'Pourquoi la première impression est-elle importante ?', 'Le travail en équipe est-il toujours plus efficace ?', 'Faut-il privilégier l’expérience ou les diplômes ?', 'Comment expliquer une idée complexe simplement ?', 'La curiosité est-elle une qualité essentielle ?', 'Peut-on être un bon leader sans être un bon orateur ?', 'Pourquoi faut-il apprendre à gérer les désaccords ?', 'La réussite dépend-elle davantage de la discipline ou du talent ?', 'Les livres peuvent-ils changer notre façon de penser ?', 'Comment garder son calme face à une critique ?', 'Faut-il savoir improviser dans la vie professionnelle ?', 'Pourquoi les pauses rendent-elles un discours plus puissant ?', 'La politesse est-elle sous-estimée dans les échanges ?', 'Comment présenter un projet en une minute ?', 'Est-il préférable de parler peu mais clairement ?', 'La communication non verbale est-elle aussi importante que les mots ?', 'Que signifie être convaincant sans exagérer ?'
 ];
 function chooseTopic(previous?: string) { const options = TOPICS.filter(topic => topic !== previous); return options[Math.floor(Math.random() * options.length)]; }
+function dailyTopic() { const today = new Date(); const key = `${today.getFullYear()}-${today.getMonth()+1}-${today.getDate()}`; let hash = 2166136261; for (let i=0;i<key.length;i++) hash = Math.imul(hash ^ key.charCodeAt(i), 16777619); return TOPICS[(hash >>> 0) % TOPICS.length]; }
 function api(path: string) { const base = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') || ''; const prefix = base ? (base.endsWith('/api') ? base : `${base}/api`) : '/api'; return `${prefix}/${path}`; }
 async function toBase64(blob: Blob) { const bytes = new Uint8Array(await blob.arrayBuffer()); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(bin); }
 
 export function ChallengePage() {
   const { user, session } = useAuth();
-  const [topic, setTopic] = useState(() => chooseTopic());
+  const [topic, setTopic] = useState(() => dailyTopic());
   const [phase, setPhase] = useState<'ready' | 'preparing' | 'recording' | 'analyzing' | 'result'>('ready');
   const [countdown, setCountdown] = useState(10);
   const [secondsLeft, setSecondsLeft] = useState(60);
@@ -41,7 +42,7 @@ export function ChallengePage() {
     return () => window.clearInterval(timer);
   }, [phase]);
   useEffect(() => { if (phase === 'recording' && secondsLeft === 0) stopCapture(); }, [phase, secondsLeft]);
-  useEffect(() => () => { if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop(); streamRef.current?.getTracks().forEach(t => t.stop()); }, []);
+  useEffect(() => () => { const recorder = recorderRef.current; if (recorder && recorder.state !== 'inactive') { discardRef.current = true; recorder.ondataavailable = null; recorder.onstop = null; recorder.onerror = null; try { recorder.stop(); } catch { /* Enregistreur déjà arrêté */ } } streamRef.current?.getTracks().forEach(t => t.stop()); }, []);
 
   function beginRecording() {
     const stream = streamRef.current;
@@ -61,7 +62,7 @@ export function ChallengePage() {
   function releaseMic() { streamRef.current?.getTracks().forEach(track => track.stop()); streamRef.current = null; recorderRef.current = null; }
   async function startChallenge() {
     setError(''); setSaveError(''); setFeedback(null); setCountdown(10); setSecondsLeft(60);
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { setError('Ce navigateur ne permet pas l’enregistrement audio. Ouvre ELOQIA en HTTPS dans Safari ou Chrome à jour et autorise le microphone.'); return; }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { setError('Ce navigateur ne permet pas l’enregistrement audio. Ouvre Eloquia en HTTPS dans Safari ou Chrome à jour et autorise le microphone.'); return; }
     try { const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); streamRef.current = stream; setPhase('preparing'); }
     catch (e) { const name = e instanceof Error ? e.name : ''; setError(name === 'NotAllowedError' ? 'Accès au microphone refusé. Autorise le microphone dans les réglages du navigateur.' : 'Impossible d’ouvrir le microphone. Vérifie qu’aucune autre application ne l’utilise.'); }
   }
@@ -87,7 +88,7 @@ export function ChallengePage() {
 
   return <div className="page-stack challenge-page">
     <Link to="/exercises" className="back-link"><ArrowLeft size={16}/> Retour au chemin</Link>
-    <section className="challenge-hero panel"><div className="challenge-hero-kicker"><Zap size={16}/> LE DÉFI MINUTE</div><h2>Une minute pour défendre ton idée.</h2><p>Un sujet surprise, dix secondes pour organiser tes pensées, puis une minute pour parler sans lire. Ton tuteur évalue ta prestation et t’indique comment progresser.</p><div className="challenge-rules"><span><Clock3 size={15}/> 10 s de préparation</span><span><Mic size={15}/> 60 s de parole</span><span><Trophy size={15}/> Note sur 100</span></div></section>
+    <section className="challenge-hero panel"><div className="challenge-hero-kicker"><Zap size={16}/> LE DÉFI MINUTE</div><h2>Une minute pour défendre ton idée.</h2><p>Chaque jour, un nouveau sujet t’attend. Dix secondes pour organiser tes pensées, puis une minute pour parler sans lire. Ton tuteur évalue ta prestation et t’indique comment progresser.</p><div className="challenge-rules"><span><Clock3 size={15}/> 10 s de préparation</span><span><Mic size={15}/> 60 s de parole</span><span><Trophy size={15}/> Note sur 100</span></div></section>
     <section className="challenge-stage panel">
       <div className="challenge-stage-top"><span className="eyebrow">TON SUJET DU JOUR</span><button className="challenge-refresh" onClick={() => reset(true)} disabled={phase === 'preparing' || phase === 'recording' || phase === 'analyzing'}><RotateCcw size={15}/> Autre sujet</button></div>
       <div className="challenge-topic"><span className="challenge-topic-quote">“</span><h3>{topic}</h3><p>Exprime ton point de vue. Appuie-toi sur un exemple concret et termine par une conclusion.</p></div>

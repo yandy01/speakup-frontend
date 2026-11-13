@@ -16,7 +16,7 @@ async function toBase64(blob: Blob): Promise<string> {
 
 export async function transcribeFrenchAudio(session: Session, audio: Blob): Promise<string> {
   if (!audio.size) throw new Error('Aucune voix détectée dans cet enregistrement.');
-  if (audio.size > 4_000_000) throw new Error('L’enregistrement est trop volumineux. Faites une intervention plus courte.');
+  if (audio.size > 3_000_000) throw new Error('L’enregistrement est trop volumineux. Faites une intervention plus courte.');
   const response = await fetch(api('transcribe-voice'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },

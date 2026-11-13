@@ -7,11 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['apple-touch-icon.png'],
+      includeAssets: ['apple-touch-icon.png', 'favicon.png', 'icons/apple-touch-icon.png'],
       manifest: {
         id: '/',
-        name: 'ELOQIA',
-        short_name: 'ELOQIA',
+        name: 'Eloquia — L’art de mieux s’exprimer',
+        short_name: 'Eloquia',
         description: 'Développe ton éloquence et deviens un meilleur orateur avec ton coach vocal.',
         lang: 'fr',
         start_url: '/',
@@ -19,8 +19,8 @@ export default defineConfig({
         display: 'standalone',
         display_override: ['standalone', 'minimal-ui'],
         orientation: 'any',
-        background_color: '#F7F5F0',
-        theme_color: '#F7F5F0',
+        background_color: '#F6FAF8',
+        theme_color: '#F6FAF8',
         categories: ['education', 'productivity'],
         icons: [
           { src: '/icons/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

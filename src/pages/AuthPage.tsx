@@ -54,7 +54,7 @@ export function AuthPage() {
       <div className="auth-form-side">
         <div className="auth-mobile-brand"><Brand /></div>
         <div className="auth-form-wrap">
-          <div className="auth-heading"><span className="eyebrow">BIENVENUE SUR ELOQIA</span><h2>{mode === 'login' ? 'Ravi de vous revoir.' : mode === 'signup' ? 'Créez votre espace.' : 'Mot de passe oublié ?'}</h2><p>{mode === 'login' ? 'Connectez-vous pour reprendre votre progression.' : mode === 'signup' ? 'Commencez votre parcours de progression dès aujourd’hui.' : 'Nous vous enverrons un lien pour réinitialiser votre mot de passe.'}</p></div>
+          <div className="auth-heading"><span className="eyebrow">BIENVENUE SUR Eloquia</span><h2>{mode === 'login' ? 'Ravi de vous revoir.' : mode === 'signup' ? 'Créez votre espace.' : 'Mot de passe oublié ?'}</h2><p>{mode === 'login' ? 'Connectez-vous pour reprendre votre progression.' : mode === 'signup' ? 'Commencez votre parcours de progression dès aujourd’hui.' : 'Nous vous enverrons un lien pour réinitialiser votre mot de passe.'}</p></div>
           {!configured && <Notice kind="error">Supabase n’est pas encore configuré. Ajoutez les variables <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> dans votre fichier <code>.env.local</code>.</Notice>}
           {error && <Notice kind="error">{error}</Notice>}
           {success && <Notice kind="success">{success}</Notice>}

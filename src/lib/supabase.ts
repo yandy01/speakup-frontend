@@ -12,6 +12,6 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
         detectSessionInUrl: true,
         storage: window.localStorage,
       },
-      global: { headers: { 'X-Client-Info': 'eloqia-pwa/2.1.0' } },
+      global: { headers: { 'X-Client-Info': 'eloqia-pwa/3.0.0' } },
     })
   : null;

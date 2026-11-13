@@ -60,9 +60,14 @@ export function ExercisesPage() {
     if (automaticNext) { setAutoAdvance(true); autoAdvanceTimer.current = window.setTimeout(() => start(automaticNext), 5000); }
     if (user && supabase) {
       setBusy(true);
-      const { error } = await supabase.from('exercise_attempts').insert({ user_id: user.id, exercise_id: active.id, score });
+      let { error } = await supabase.from('exercise_attempts').insert({ user_id: user.id, exercise_id: active.id, score, xp_earned: gainedXp });
+      if (error && /xp_earned|column/i.test(error.message)) {
+        // Backward-compatible until the additive XP migration has been applied.
+        const fallback = await supabase.from('exercise_attempts').insert({ user_id: user.id, exercise_id: active.id, score });
+        error = fallback.error;
+      }
       setBusy(false);
-      if (error) console.warn('Eloqia: impossible de synchroniser la tentative', error.message);
+      if (error) console.warn('Eloquia: impossible de synchroniser la tentative', error.message);
     }
   }
   function retry() { if (active) start(active); }

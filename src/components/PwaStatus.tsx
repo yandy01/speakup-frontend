@@ -30,7 +30,7 @@ export function PwaStatus() {
     return (
       <div className="pwa-status" role="status">
         <RefreshCw size={17} />
-        <span>Une nouvelle version de ELOQIA est disponible.</span>
+        <span>Une nouvelle version d’Eloquia est disponible.</span>
         <button type="button" onClick={() => updateServiceWorker(true)}>Mettre à jour</button>
         <button type="button" className="pwa-status-close" aria-label="Plus tard" onClick={() => setNeedRefresh(false)}><X size={16} /></button>
       </div>

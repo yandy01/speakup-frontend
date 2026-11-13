@@ -1,57 +1,61 @@
-# ELOQIA PWA V2.1 — état de livraison
+# Eloquia PWA V3.0.0 — état de livraison
 
-## Produit et interface
+## Refonte produit et interface
 
-- Marque ELOQIA, version française uniquement.
-- PWA React + TypeScript + Vite, adaptée aux petits écrans.
-- Navigation mobile fixe en bas : Accueil, Parcours, Coach, Lecture, Progrès.
-- Mode clair par défaut et mode sombre sélectionnable.
-- Police Poppins avec Verdana en solution de repli.
-- Écrans d'inscription et de connexion responsive ; connexion automatique si Supabase renvoie une session ou si la confirmation email est désactivée.
+- Mission : éloquence et prise de parole, V1 française uniquement.
+- Public : étudiants, professionnels, entrepreneurs, grand public et orateurs.
+- Thème clair par défaut, vert émeraude, mode sombre secondaire et police Poppins avec Verdana de repli.
+- Navigation mobile à cinq onglets : Accueil, Exercices, Coach IA, Téléprompteur, Profil. La progression est accessible depuis l’accueil et le profil.
+- Accueil simplifié et sans photo : niveau/XP, série, accès principal à l’entraînement, outils rapides et lien de progression.
+- Onboarding personnalisé en quatre étapes. Dans cette livraison, les préférences sont conservées dans le localStorage du navigateur, par utilisateur.
+- Icônes PWA remplacées par un symbole microphone temporaire ; le logo de marque final reste à concevoir.
 
-## Fonctionnalités
+## Fonctionnalités et corrections intégrées
 
-- Coach conversationnel texte via Agnes AI, Gemini en secours.
-- Dialogue vocal push-to-talk : capture du microphone, transcription française, réponse écrite, lecture audio et onde animée.
-- Choix de voix TTS : Achernar (féminine), Charon (masculine) via Gemini TTS.
-- Parcours de 20 étapes pédagogiques, 5 questions par étape, explications, scores, XP, seuil de 80 % et déblocage automatique.
-- Téléprompteur plein écran avec 15 textes français, réglage de taille et de vitesse, défilement automatique, pause/reprise et analyse de lecture.
-- Défi oral : sujet aléatoire, 10 secondes de préparation, 60 secondes d'enregistrement, analyse et note sur 100.
-- Progression alimentée par les exercices, les lectures et les défis.
+- Coach vocal push-to-talk par intervention : appuyer pour démarrer, appuyer de nouveau pour arrêter, transcription, réponse textuelle et réponse vocale activable.
+- Grande onde centrale avec animations distinctes pour l’écoute, le traitement et la réponse. L’onde est une animation d’état ; elle n’est pas encore un visualiseur d’amplitude audio mesurée.
+- Historique des conversations disponible sur grand écran et dans un panneau repliable sur téléphone.
+- Téléprompteur : taille de texte 24–44 px, vitesse réglable, mode plein écran, enregistrement audio, pause/reprise et analyse IA. Le défilement utilise une boucle `requestAnimationFrame` basée sur le temps écoulé et s’arrête à la fin du texte.
+- Défi oral du jour : 10 secondes de préparation, 60 secondes de parole, analyse et attribution d’XP.
+- Parcours de 20 étapes pédagogiques, cinq questions par étape et validation à 80 %. La prochaine étape se déverrouille automatiquement après validation.
+- XP, niveaux, séries et badges calculés à partir des tentatives enregistrées.
+- Les erreurs de configuration du quota Supabase sont distinguées d’un dépassement réel de quota dans les endpoints de transcription et du défi.
 
-## Backend et sécurité
+## Données et sécurité
 
-- Supabase Auth et les cinq tables historiques conservés : `profiles`, `conversations`, `messages`, `exercises`, `user_progress`.
-- RLS existant conservé. Les nouvelles tables d'historique ont des politiques RLS par utilisateur.
-- Fonctions serverless Vercel : `/api/chat`, `/api/transcribe-voice`, `/api/speech`, `/api/analyze-reading`, `/api/analyze-speech`.
-- Les clés privées Agnes/Gemini restent dans l'environnement serveur.
-- Les audios bruts ne sont pas conservés dans les tables Supabase ni le cache PWA.
+- Les tables historiques `profiles`, `conversations`, `messages`, `exercises` et `user_progress` ne sont ni supprimées ni recréées.
+- Les clés fournisseurs Agnes/Gemini restent exclusivement côté serveur ; aucune clé privée n’est exposée par une variable `VITE_`.
+- Les API vérifient la session Supabase, limitent les tailles d’entrée et ne mettent pas les réponses/audio privés en cache.
+- La vérification de quota requiert `supabase/ai_chat_security.sql`. Vérifier dans Supabase que la fonction `consume_ai_chat_quota` existe avant de l’exécuter ; ne pas réexécuter aveuglément.
+- Migrations additives disponibles :
+  - `20261112_exercise_attempts.sql`
+  - `20261113_eloqia_challenges.sql`
+  - `20261113_eloqia_reading_attempts.sql`
+  - `20261113_eloqia_exercise_xp.sql`
+- Vérifier leur état dans Supabase avant exécution. Les trois premières créent des tables de tentatives supplémentaires ; la dernière ajoute la colonne XP à `exercise_attempts`. Aucune migration ne réinitialise les tables historiques.
 
-## Migrations additives
+## Limites connues / non couvertes
 
-À exécuter uniquement si elles n'ont pas déjà été installées :
+- Capture vidéo avec caméra dans le téléprompteur : non implémentée ; l’analyse repose sur l’audio.
+- Synchronisation des réponses d’onboarding entre appareils : non implémentée ; données locales sur l’appareil.
+- Les préférences d’onboarding ne pilotent pas encore automatiquement la difficulté des 20 étapes.
+- Le barème de niveau (500 XP par niveau) est provisoire.
+- Paiement Premium, notifications push, classement multi-utilisateurs et application native : hors périmètre.
+- L’onde du Coach est animée selon l’état du dialogue, mais ne représente pas encore le volume sonore mesuré en temps réel.
 
-- `supabase/migrations/20261112_exercise_attempts.sql`
-- `supabase/migrations/20261113_eloqia_challenges.sql`
-- `supabase/migrations/20261113_eloqia_reading_attempts.sql`
+## Vérifications réalisées dans l’environnement de préparation
 
-`supabase/ai_chat_security.sql` avait déjà été exécutée par le propriétaire du projet selon le récapitulatif fourni.
+- 34 fichiers TypeScript/TSX (application, API et configuration) passés par vérification syntaxique sans diagnostic.
+- Les endpoints `api/*.ts` passent `tsc --noEmit --strict`.
+- Le CSS a été parsé par PostCSS sans erreur.
+- `package.json`, `vercel.json`, `tsconfig.json` et `tsconfig.app.json` sont des JSON valides.
+- Les imports relatifs locaux ont été parcourus ; un seul import CSS est attendu et résolu par Vite.
 
-## Démarrage
+## Vérifications non réalisées
 
-```bash
-npm install
-npm run dev:full
-```
+- L’installation npm a expiré dans l’environnement de préparation ; le dossier `node_modules` n’est pas complet. Le build Vite/TypeScript global (`npm run build`) n’a donc pas pu être validé.
+- Pas de test d’exécution navigateur, Android ou iOS dans cette session.
+- Pas d’appel réel aux comptes Supabase, Agnes AI ou Gemini ; les variables serveur et les quotas doivent être vérifiés dans l’environnement de déploiement.
+- Les permissions microphone et la compatibilité des codecs (`audio/webm`, `audio/mp4`, etc.) doivent être testées sur appareils réels.
 
-Ouvrir `http://localhost:3000`. `npm run dev` lance Vite seul sur le port 5173 et ne sert pas les fonctions `/api`.
-
-Pour la production Vercel : Build Command `npm run build`, Output Directory `dist`. Après changement d'une variable d'environnement, effectuer un nouveau déploiement.
-
-## Limites et contrôles restants
-
-- La conversation vocale est en push-to-talk, pas en streaming temps réel.
-- Agnes AI est utilisé pour les réponses textuelles ; la documentation publique consultée ne décrit pas de synthèse vocale Agnes. Gemini TTS produit donc les réponses audio.
-- L'accès au microphone nécessite HTTPS en production et un navigateur compatible `getUserMedia` / `MediaRecorder`.
-- Les achats Premium, les notifications push, le tableau de bord administrateur complet et le binaire natif App Store/Play Store restent hors du périmètre de cette PWA.
-- Les fichiers TS/TSX ont passé une vérification de transpilation syntaxique. L'installation npm et le build complet ont expiré ou n'ont pas pu être exécutés dans l'environnement de préparation ; il faut confirmer `npm install` et `npm run build` sur le poste de développement ou dans Vercel.
+**Statut :** archive de développement corrigée et contrôles statiques passés ; ne pas considérer la version comme validée pour production avant un `npm install`, `npm run build`, puis des tests fonctionnels avec les clés et migrations du projet réel.

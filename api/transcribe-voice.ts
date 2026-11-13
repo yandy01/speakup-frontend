@@ -7,9 +7,10 @@ const header = (req: Req, name: string) => { const v = req.headers[name.toLowerC
 const send = (res: Res, status: number, body: Obj) => res.status(status).json(body);
 const timeoutFetch = async (url: string, init: RequestInit, ms = 35_000) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); try { return await fetch(url, { ...init, signal: c.signal }); } finally { clearTimeout(t); } };
 function textFrom(data: any): string { const parts = data?.candidates?.[0]?.content?.parts; return Array.isArray(parts) ? parts.map((p: any) => typeof p?.text === 'string' ? p.text : '').join('\n').trim() : ''; }
-async function quota(token: string, key: string, url: string) {
-  const r = await timeoutFetch(`${url}/rest/v1/rpc/consume_ai_chat_quota`, { method: 'POST', headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_window_seconds: 60, p_max_requests: 12 }) }, 8000);
-  return r.ok && await r.json() === true;
+async function quota(token: string, key: string, url: string): Promise<{ available: boolean; allowed: boolean }> {
+  const response = await timeoutFetch(`${url}/rest/v1/rpc/consume_ai_chat_quota`, { method: 'POST', headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_window_seconds: 60, p_max_requests: 12 }) }, 8000);
+  if (!response.ok) return { available: false, allowed: false };
+  return { available: true, allowed: await response.json().catch(() => false) === true };
 }
 export default async function handler(req: Req, res: Res) {
   res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -22,7 +23,9 @@ export default async function handler(req: Req, res: Res) {
     if (!url || !key || !geminiKey) { send(res, 503, { error: 'Le service vocal n’est pas entièrement configuré côté serveur.' }); return; }
     const auth = await timeoutFetch(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } }, 8000);
     if (!auth.ok) { send(res, 401, { error: 'Votre session a expiré. Reconnectez-vous.' }); return; }
-    if (!(await quota(token, key, url))) { send(res, 429, { error: 'Vous avez atteint la limite temporaire de messages vocaux. Réessayez dans une minute.' }); return; }
+    const rateLimit = await quota(token, key, url);
+    if (!rateLimit.available) { send(res, 503, { error: 'La protection anti-abus Supabase est indisponible. Vérifiez que supabase/ai_chat_security.sql a bien été appliqué.' }); return; }
+    if (!rateLimit.allowed) { send(res, 429, { error: 'Vous avez atteint la limite temporaire de messages vocaux. Réessayez dans une minute.' }); return; }
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body as Obj;
     const audio = typeof body?.audio_base64 === 'string' ? body.audio_base64 : '';
     const mime = typeof body?.mime_type === 'string' ? body.mime_type.split(';')[0] : 'audio/webm';

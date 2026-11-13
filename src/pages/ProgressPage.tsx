@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Award, BarChart3, Clock3, Flame, Mic, Target, TrendingUp, Trophy, Zap } from 'lucide-react';
+import { Award, BarChart3, BookOpen, Clock3, Flame, Mic, Mic2, Target, TrendingUp, Trophy, Zap } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { listProgress } from '../lib/data';
@@ -7,11 +7,13 @@ import { supabase } from '../lib/supabase';
 import type { ProgressEntry } from '../lib/types';
 import { Loading } from '../components/Loading';
 import { Notice } from '../components/Notice';
-import { EmptyPanel } from './DashboardPage';
+import { EmptyPanel } from '../components/EmptyPanel';
 
 type ExerciseAttempt = { id:string; exercise_id:string; score:number; created_at:string };
 type SpeakingAttempt = { id:string; topic:string; duration_seconds:number; total_score:number; xp_earned:number; created_at:string };
 type ReadingAttempt = { id:string; text_id:string; title:string; duration_seconds:number; total_score:number|null; xp_earned:number; created_at:string };
+function activeDayKey(value: string | Date) { const date = value instanceof Date ? value : new Date(value); return Number.isNaN(date.getTime()) ? '' : `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; }
+function currentPracticeStreak(values: string[]) { const days = new Set(values.map(activeDayKey).filter(Boolean)); const cursor = new Date(); cursor.setHours(0,0,0,0); if (!days.has(activeDayKey(cursor))) cursor.setDate(cursor.getDate()-1); let count = 0; while (days.has(activeDayKey(cursor)) && count < 365) { count++; cursor.setDate(cursor.getDate()-1); } return count; }
 
 export function ProgressPage() {
   const { user } = useAuth();
@@ -56,6 +58,17 @@ export function ProgressPage() {
   const totalMinutes = rows.reduce((sum, row) => sum + (typeof row.duration_minutes === 'number' ? row.duration_minutes : typeof row.duration_seconds === 'number' ? row.duration_seconds / 60 : 0), 0)
     + speakingAttempts.reduce((sum, row) => sum + (Number(row.duration_seconds) || 0) / 60, 0)
     + readingAttempts.reduce((sum, row) => sum + (Number(row.duration_seconds) || 0) / 60, 0);
+  const activityDates = [...rows.map(row => row.created_at || row.completed_at || ''), ...exerciseAttempts.map(row => row.created_at), ...speakingAttempts.map(row => row.created_at), ...readingAttempts.map(row => row.created_at)].filter(Boolean);
+  const streak = currentPracticeStreak(activityDates);
+  const activityCount = exerciseAttempts.length + speakingAttempts.length + readingAttempts.length + rows.length;
+  const badges = [
+    { id:'first', title:'Premier entraînement', description:'Terminer une première activité', icon:Mic2, unlocked:activityCount >= 1 },
+    { id:'mastery', title:'Première maîtrise', description:'Obtenir au moins 80/100', icon:Award, unlocked:scoreValues.some(value => value >= 80) },
+    { id:'voice', title:'Prendre la parole', description:'Réaliser 5 défis oraux', icon:Mic, unlocked:speakingAttempts.length >= 5 },
+    { id:'xp', title:'En route vers l’excellence', description:'Cumuler 500 XP', icon:Zap, unlocked:xp >= 500 },
+    { id:'regular', title:'Régularité', description:'Pratiquer 3 jours consécutifs', icon:Flame, unlocked:streak >= 3 },
+    { id:'reader', title:'Lecteur assidu', description:'Analyser 5 lectures', icon:BookOpen, unlocked:readingAttempts.length >= 5 },
+  ];
   const chartData = useMemo(() => {
     const points = [
       ...rows.filter(row => row.created_at).map(row => ({ created_at: row.created_at!, score: typeof row.score === 'number' ? row.score : null })),
@@ -76,12 +89,13 @@ export function ProgressPage() {
     <section className="page-intro-row"><div><span className="eyebrow">TON ÉVOLUTION</span><h2>Tu progresses, étape après étape.</h2><p>Retrouve tes scores, tes défis oratoires, ton temps d’entraînement et les compétences que tu développes.</p></div><div className="intro-medallion"><BarChart3 size={25}/></div></section>
     {error && <Notice kind="info">{error}</Notice>}
     {loading ? <Loading label="Calcul de ta progression…"/> : <>
-      <section className="progress-xp-banner panel"><div className="progress-xp-medal"><Trophy size={25}/></div><div><span className="eyebrow">TES POINTS D’EXPÉRIENCE</span><strong>{xp.toLocaleString('fr-FR')} XP</strong><span>Gagnés grâce aux exercices et aux défis oratoires.</span></div><div className="progress-streak"><Flame size={20}/><strong>{speakingAttempts.length}</strong><small>défis réalisés</small></div></section>
+      <section className="progress-xp-banner panel"><div className="progress-xp-medal"><Trophy size={25}/></div><div><span className="eyebrow">TES POINTS D’EXPÉRIENCE</span><strong>{xp.toLocaleString('fr-FR')} XP</strong><span>Gagnés grâce aux exercices et aux défis oratoires.</span></div><div className="progress-streak"><Flame size={20}/><strong>{streak}</strong><small>jours consécutifs</small></div></section>
       <div className="stats-grid progress-stats"><ProgressStat label="Activités suivies" value={String(rows.length + exerciseAttempts.length + speakingAttempts.length + readingAttempts.length)} icon={<Target size={18}/>} /><ProgressStat label="Étapes maîtrisées" value={String(bestExerciseScores.size ? [...bestExerciseScores.values()].filter(score => score >= 80).length : 0)} icon={<Award size={18}/>} /><ProgressStat label="Temps de pratique" value={`${Math.round(totalMinutes)} min`} icon={<Clock3 size={18}/>} /><ProgressStat label="Score moyen" value={average === null ? '—' : `${average}/100`} icon={<TrendingUp size={18}/>} /></div>
       <div className="progress-two-grid">
-        <div className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">TES RÉSULTATS</span><h3>Évolution des scores</h3></div><span className="chart-legend"><i/> Note /100</span></div>{chartData.length ? <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{top:12,right:8,left:-20,bottom:0}}><defs><linearGradient id="eloqiaScoreFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#c49336" stopOpacity={.25}/><stop offset="95%" stopColor="#c49336" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="var(--line-strong)" strokeDasharray="4 5" vertical={false}/><XAxis dataKey="date" tick={{fill:'var(--muted)',fontSize:11}} axisLine={false} tickLine={false}/><YAxis domain={[0,100]} tick={{fill:'var(--muted)',fontSize:11}} axisLine={false} tickLine={false}/><Tooltip contentStyle={{background:'var(--panel)',border:'1px solid var(--line-strong)',borderRadius:12,color:'var(--text)'}}/><Area type="monotone" dataKey="score" stroke="#b88736" strokeWidth={2.5} fill="url(#eloqiaScoreFill)"/></AreaChart></ResponsiveContainer></div> : <EmptyPanel icon={<BarChart3 size={22}/>} title="Ta courbe se construira ici" text="Termine un exercice ou un défi oral pour commencer à voir ton évolution."/>}</div>
+        <div className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">TES RÉSULTATS</span><h3>Évolution des scores</h3></div><span className="chart-legend"><i/> Note /100</span></div>{chartData.length ? <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{top:12,right:8,left:-20,bottom:0}}><defs><linearGradient id="eloqiaScoreFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#07865e" stopOpacity={.25}/><stop offset="95%" stopColor="#07865e" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="var(--line-strong)" strokeDasharray="4 5" vertical={false}/><XAxis dataKey="date" tick={{fill:'var(--muted)',fontSize:11}} axisLine={false} tickLine={false}/><YAxis domain={[0,100]} tick={{fill:'var(--muted)',fontSize:11}} axisLine={false} tickLine={false}/><Tooltip contentStyle={{background:'var(--panel)',border:'1px solid var(--line-strong)',borderRadius:12,color:'var(--text)'}}/><Area type="monotone" dataKey="score" stroke="#07865e" strokeWidth={2.5} fill="url(#eloqiaScoreFill)"/></AreaChart></ResponsiveContainer></div> : <EmptyPanel icon={<BarChart3 size={22}/>} title="Ta courbe se construira ici" text="Termine un exercice ou un défi oral pour commencer à voir ton évolution."/>}</div>
         <div className="panel challenge-summary-panel"><div className="panel-heading"><div><span className="eyebrow">ENTRAÎNEMENT ORAL</span><h3>Tes défis minute</h3></div><Mic size={20}/></div><strong className="challenge-summary-score">{speakingAttempts.length ? `${Math.round(speakingAttempts.reduce((sum,row)=>sum+row.total_score,0)/speakingAttempts.length)}/100` : '—'}</strong><span className="challenge-summary-caption">Moyenne de tes défis enregistrés</span><div className="challenge-summary-list"><span><Zap size={14}/> {speakingAttempts.length} défis réalisés</span><span><Clock3 size={14}/> {Math.round(speakingAttempts.reduce((sum,row)=>sum+row.duration_seconds,0)/60)} min de parole enregistrée</span></div></div>
       </div>
+      <section className="panel eloqia-badges-panel"><div className="panel-heading"><div><span className="eyebrow">TES RÉCOMPENSES</span><h3>Mes badges</h3></div><span className="badge-count">{badges.filter(item => item.unlocked).length}/{badges.length} débloqués</span></div><div className="eloqia-badges-grid">{badges.map(item => { const Icon = item.icon; return <article key={item.id} className={`eloqia-badge ${item.unlocked ? 'unlocked' : 'locked'}`}><span className="eloqia-badge-icon"><Icon size={21}/></span><strong>{item.title}</strong><small>{item.description}</small><em>{item.unlocked ? 'Débloqué' : 'À débloquer'}</em></article>; })}</div><p className="badges-footnote">Les badges sont attribués automatiquement à partir de tes activités et de tes résultats.</p></section>
       <div className="panel history-panel"><div className="panel-heading"><div><span className="eyebrow">TON HISTORIQUE</span><h3>Activités récentes</h3></div></div>{history.length ? <div className="history-list">{history.map(row=><div className="history-row" key={row.id}><div className="history-mark"><Target size={16}/></div><div className="history-copy"><strong>{row.title}</strong><span>{row.kind} · {row.date ? new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium'}).format(new Date(row.date)) : 'Date non renseignée'}</span></div><span className={`history-status ${row.score !== null && row.score >= 80 ? 'done' : ''}`}>{row.score === null ? 'Terminé' : `${row.score}/100`}</span></div>)}</div> : <EmptyPanel icon={<Award size={22}/>} title="Ton historique est vide" text="Tes exercices, lectures et défis apparaîtront ici au fur et à mesure."/>}</div>
     </>}
   </div>;

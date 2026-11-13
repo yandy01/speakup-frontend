@@ -169,41 +169,32 @@ async function callAgnes(messages: ChatMessage[], systemPrompt: string): Promise
 
 async function callGemini(messages: ChatMessage[], systemPrompt: string): Promise<string> {
   const key = env('GEMINI_API_KEY');
-  const model = env('GEMINI_MODEL');
-  if (!key || !model) throw new Error('GEMINI_NOT_CONFIGURED');
+  const model = env('GEMINI_MODEL') || 'gemini-3.8-flash';
+  if (!key) throw new Error('GEMINI_NOT_CONFIGURED');
 
-  // Google recommends the Interactions API for new projects. Store is disabled so
-  // ELOQIA's own Supabase history remains the source of truth for conversations.
-  const input = messages.map((message) => ({
-    role: message.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: message.content }],
-  }));
-  const response = await fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/interactions', {
+  // Use the documented generateContent message schema for this stateless fallback.
+  // Supabase remains the conversation history, so no second provider-side session is stored.
+  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ''))}:generateContent`, {
     method: 'POST',
     headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model,
-      input,
-      system_instruction: systemPrompt,
-      generation_config: { temperature: 0.55, max_output_tokens: 700 },
-      store: false,
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: messages.map((message) => ({
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content }],
+      })),
+      generationConfig: { temperature: 0.55, maxOutputTokens: 700 },
     }),
   });
   if (!response.ok) throw new Error(`GEMINI_HTTP_${response.status}`);
   const payload = await response.json() as JsonObject;
-  const steps = payload.steps;
-  if (!Array.isArray(steps)) throw new Error('GEMINI_EMPTY_RESPONSE');
-  const text = steps
-    .filter((step) => step && typeof step === 'object' && (step as JsonObject).type === 'model_output')
-    .flatMap((step) => {
-      const content = (step as JsonObject).content;
-      return Array.isArray(content) ? content : [];
-    })
-    .map((part) => part && typeof part === 'object' && typeof (part as JsonObject).text === 'string'
-      ? String((part as JsonObject).text)
-      : '')
-    .join('\n')
-    .trim();
+  const candidates = payload.candidates;
+  if (!Array.isArray(candidates) || !candidates.length) throw new Error('GEMINI_EMPTY_RESPONSE');
+  const content = (candidates[0] as JsonObject)?.content as JsonObject | undefined;
+  const parts = content?.parts;
+  const text = Array.isArray(parts)
+    ? parts.map((part) => part && typeof part === 'object' && typeof (part as JsonObject).text === 'string' ? String((part as JsonObject).text) : '').join('\n').trim()
+    : '';
   if (!text) throw new Error('GEMINI_EMPTY_RESPONSE');
   return text.slice(0, 8_000);
 }

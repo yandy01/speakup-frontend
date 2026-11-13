@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { onboardingStorageKey } from './OnboardingPage';
 import { Check, Mail, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getProfile, updateProfile } from '../lib/data';
@@ -8,6 +10,7 @@ import { Notice } from '../components/Notice';
 
 export function ProfilePage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [name, setName] = useState('');
   const [level, setLevel] = useState('beginner');
@@ -52,7 +55,7 @@ export function ProfilePage() {
           <div className="form-actions"><button className="button button-gold" type="submit" disabled={saving}><Save size={16} /> {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}</button></div>
         </form>
       </section>
-      <aside className="profile-side"><div className="panel security-panel"><div className="security-icon"><ShieldCheck size={21} /></div><h3>Votre espace est privé</h3><p>Vos informations sont associées à votre compte. Les accès aux données sont protégés par les règles RLS configurées dans Supabase.</p><span className="security-label"><i /> Session authentifiée</span></div><div className="panel profile-note"><span className="eyebrow">PRÉFÉRENCES</span><h3>Apprendre à votre rythme</h3><p>Les préférences avancées, les rappels et la gestion de la confidentialité seront ajoutés au fil des prochaines étapes.</p></div></aside>
+      <aside className="profile-side"><div className="panel security-panel"><div className="security-icon"><ShieldCheck size={21} /></div><h3>Votre espace est privé</h3><p>Vos informations sont associées à votre compte. Les accès aux données sont protégés par les règles RLS configurées dans Supabase.</p><span className="security-label"><i /> Session authentifiée</span></div><div className="panel profile-note"><span className="eyebrow">PRÉFÉRENCES</span><h3>Votre parcours personnalisé</h3><p>Modifiez vos objectifs, votre niveau, vos difficultés et votre durée quotidienne d’entraînement.</p><button className="button button-secondary" type="button" onClick={() => { if (user) localStorage.removeItem(onboardingStorageKey(user.id)); navigate('/onboarding'); }}>Modifier mon parcours</button></div></aside>
     </div>}
   </div>;
 }

@@ -61,10 +61,10 @@ export function PwaInstallPrompt() {
 
   return (
     <>
-      <aside className="pwa-install-banner" role="region" aria-label="Installer ELOQIA">
+      <aside className="pwa-install-banner" role="region" aria-label="Installer Eloquia">
         <img src="/icons/pwa-192x192.png" alt="" />
         <div className="pwa-install-copy">
-          <strong>Installer ELOQIA</strong>
+          <strong>Installer Eloquia</strong>
           <span>Retrouve ton coach directement sur ton écran d'accueil.</span>
         </div>
         <button type="button" className="pwa-install-action" onClick={install}>
